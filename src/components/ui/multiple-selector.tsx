@@ -180,12 +180,14 @@ const MultipleSelector = React.forwardRef<
 
   React.useEffect(() => {
     if (value) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelected(value);
     }
   }, [value]);
 
   React.useEffect(() => {
     if (!controlledOptions && !onSearch) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAsyncOptions(defaultOptions);
     }
   }, [controlledOptions, defaultOptions, onSearch]);
@@ -199,6 +201,7 @@ const MultipleSelector = React.forwardRef<
       return;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAsyncOptions(onSearchSync(debouncedSearchTerm));
   }, [debouncedSearchTerm, onSearchSync, open, triggerSearchOnFocus]);
 
@@ -213,6 +216,7 @@ const MultipleSelector = React.forwardRef<
 
     let cancelled = false;
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoading(true);
     onSearch(debouncedSearchTerm)
       .then((results) => {

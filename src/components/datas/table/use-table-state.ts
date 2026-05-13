@@ -19,22 +19,25 @@ export function useTableState(options: UseTableStateOptions = {}) {
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, options.debounceMs ?? 500);
   const [sorting, setSorting] = useState<SortingState>(options.initialSorting ?? []);
+  const [status, setStatus] = useState<"all" | "active" | "inactive">("active");
 
   return {
     pagination,
     setPagination,
-    search, // For the input value (immediate)
+    search,
     setSearch,
-    debouncedSearch, // For API calls or filtering
+    debouncedSearch,
     sorting,
     setSorting,
-    // Helper to get raw params for API calls
+    status,
+    setStatus,
     apiParams: {
       page: pagination.pageIndex + 1,
       pageSize: pagination.pageSize,
-      search: debouncedSearch || undefined, // Use debounced search here
+      search: debouncedSearch || undefined,
       sortBy: sorting.length > 0 ? sorting[0].id : undefined,
       sortOrder: sorting.length > 0 ? (sorting[0].desc ? "desc" : "asc") : undefined,
+      status: status !== "active" ? status : undefined, // Send status if not default
     },
   };
 }
@@ -45,6 +48,7 @@ export function getTableSearchParams(apiParams: any) {
     pageSize: apiParams.pageSize.toString(),
   });
   if (apiParams.search) params.set("search", apiParams.search);
+  if (apiParams.status) params.set("status", apiParams.status);
   if (apiParams.sortBy) {
     params.set("sortBy", apiParams.sortBy);
     params.set("sortOrder", apiParams.sortOrder || "asc");

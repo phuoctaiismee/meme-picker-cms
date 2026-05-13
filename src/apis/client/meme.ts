@@ -95,8 +95,13 @@ export const meme = {
       .select(
         "id, media_key, title, storage_provider, media_type, ocr_content, access_tier, is_active, created_at, meme_tags(tags(id, name, slug, category))",
         { count: "exact" }
-      )
-      .eq("is_active", true);
+      );
+
+    if (params.status === "active" || !params.status) {
+      query = query.eq("is_active", true);
+    } else if (params.status === "inactive") {
+      query = query.eq("is_active", false);
+    }
 
     query = applyPaginationAndSorting(query, params, {
       defaultSortBy: "created_at",
@@ -185,17 +190,18 @@ export const meme = {
     return newMeme.id;
   },
 
-  async update(id: string, input: Omit<CreateMemeInput, "file">): Promise<void> {
+  async update(id: string, input: Partial<Omit<CreateMemeInput, "file">>): Promise<void> {
     const supabase = await createSupabaseServerClient();
+
+    const updateData: any = {};
+    if (input.title !== undefined) updateData.title = input.title || null;
+    if (input.ocr_content !== undefined) updateData.ocr_content = input.ocr_content || null;
+    if (input.access_tier !== undefined) updateData.access_tier = input.access_tier || "free";
+    if (input.is_active !== undefined) updateData.is_active = input.is_active;
 
     const { data: updatedMeme, error: memeError } = await supabase
       .from("memes")
-      .update({
-        title: input.title || null,
-        ocr_content: input.ocr_content || null,
-        access_tier: input.access_tier || "free",
-        is_active: input.is_active ?? true,
-      })
+      .update(updateData)
       .eq("id", id)
       .select("id, media_key, title")
       .single();
@@ -204,30 +210,32 @@ export const meme = {
       throw new Error(memeError?.message || "Failed to update meme.");
     }
 
-    // Update tags: Delete existing joins and recreate
-    await supabase.from("meme_tags").delete().eq("meme_id", id);
+    if (input.tags) {
+      // Update tags: Delete existing joins and recreate
+      await supabase.from("meme_tags").delete().eq("meme_id", id);
 
-    const tagRows = await Promise.all(
-      input.tags.map(async (tag) => {
-        const { data, error } = await supabase
-          .from("tags")
-          .upsert({ name: tag.name, slug: tag.slug, category: "general" }, { onConflict: "slug" })
-          .select("id")
-          .single();
+      const tagRows = await Promise.all(
+        input.tags.map(async (tag) => {
+          const { data, error } = await supabase
+            .from("tags")
+            .upsert({ name: tag.name, slug: tag.slug, category: "general" }, { onConflict: "slug" })
+            .select("id")
+            .single();
 
-        if (error || !data) throw new Error(error?.message || `Failed to save tag ${tag.name}.`);
-        return data;
-      })
-    );
+          if (error || !data) throw new Error(error?.message || `Failed to save tag ${tag.name}.`);
+          return data;
+        })
+      );
 
-    const { error: joinError } = await supabase.from("meme_tags").insert(
-      tagRows.map((tag) => ({
-        meme_id: id,
-        tag_id: tag.id,
-      }))
-    );
+      const { error: joinError } = await supabase.from("meme_tags").insert(
+        tagRows.map((tag) => ({
+          meme_id: id,
+          tag_id: tag.id,
+        }))
+      );
 
-    if (joinError) throw new Error(joinError.message);
+      if (joinError) throw new Error(joinError.message);
+    }
 
     await logAdminAction({
       action: "meme.update",
@@ -236,7 +244,7 @@ export const meme = {
       metadata: {
         media_key: updatedMeme.media_key,
         title: updatedMeme.title,
-        tag_ids: tagRows.map((tag) => tag.id),
+        ...(input.tags ? { tag_count: input.tags.length } : {}),
       },
     });
   },
@@ -244,20 +252,64 @@ export const meme = {
   async delete(id: string): Promise<void> {
     const supabase = await createSupabaseServerClient();
 
-    const { data, error } = await supabase
+    // Fetch the meme first to check its status
+    const { data: meme, error: fetchError } = await supabase
       .from("memes")
-      .update({ is_active: false })
+      .select("id, media_key, storage_provider, media_type, is_active, title")
       .eq("id", id)
-      .select("id, media_key")
       .single();
 
-    if (error || !data) throw new Error(error?.message || "Failed to delete meme.");
+    if (fetchError || !meme) {
+      throw new Error(fetchError?.message || "Meme not found.");
+    }
 
-    await logAdminAction({
-      action: "meme.delete",
-      entityType: "meme",
-      entityId: data.id,
-      metadata: { media_key: data.media_key, is_active: false },
-    });
+    if (meme.is_active) {
+      // Soft delete: Deactivate
+      const { error } = await supabase
+        .from("memes")
+        .update({ is_active: false })
+        .eq("id", id);
+
+      if (error) throw new Error(error.message);
+
+      await logAdminAction({
+        action: "meme.deactivate",
+        entityType: "meme",
+        entityId: id,
+        metadata: {
+          media_key: meme.media_key,
+          title: meme.title,
+        },
+      });
+    } else {
+      // Hard delete: Remove from DB and Storage
+      
+      // 1. Delete file from storage
+      const storage = getStorageProvider(meme.storage_provider);
+      try {
+        await storage.delete(meme.media_key, meme.media_type);
+      } catch (storageError) {
+        console.error("Failed to delete file from storage:", storageError);
+        // We continue even if storage delete fails to clean up the database
+      }
+
+      // 2. Delete from database (Cascade will handle meme_tags and interactions)
+      const { error: dbError } = await supabase
+        .from("memes")
+        .delete()
+        .eq("id", id);
+
+      if (dbError) throw new Error(dbError.message);
+
+      await logAdminAction({
+        action: "meme.delete_permanent",
+        entityType: "meme",
+        entityId: id,
+        metadata: {
+          media_key: meme.media_key,
+          title: meme.title,
+        },
+      });
+    }
   },
 };

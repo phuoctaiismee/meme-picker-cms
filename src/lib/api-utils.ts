@@ -14,11 +14,14 @@ export function parsePaginationParams(url: string): PaginationParams {
   const sortBy = searchParams.get("sortBy") ?? undefined;
   const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") ?? undefined;
 
+  const status = (searchParams.get("status") as "all" | "active" | "inactive") ?? undefined;
+  
   return {
     page,
     pageSize,
     search,
     sortBy,
     sortOrder,
+    status,
   };
 }

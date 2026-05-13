@@ -37,6 +37,8 @@ export function MemeScreen() {
     setSearch,
     sorting,
     setSorting,
+    status,
+    setStatus,
     apiParams,
   } = useTableState();
 
@@ -66,6 +68,8 @@ export function MemeScreen() {
       onSearchChange={setSearch}
       sorting={sorting}
       onSortingChange={setSorting}
+      status={status}
+      onStatusChange={setStatus}
     />
   );
 }

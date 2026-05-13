@@ -105,3 +105,16 @@ export async function deleteMemeAction(id: string) {
     return { error: getAdminDatabaseErrorMessage(message) };
   }
 }
+
+export async function toggleMemeStatusAction(id: string, isActive: boolean) {
+  try {
+    await appClient.meme.update(id, {
+      is_active: isActive,
+    });
+    revalidatePath("/");
+    return { success: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Failed to update meme status.";
+    return { error: getAdminDatabaseErrorMessage(message) };
+  }
+}

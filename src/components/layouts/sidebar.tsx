@@ -5,12 +5,13 @@ import { usePathname } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
-  Activity01Icon,
-  Home01Icon,
+  DashboardCircleIcon,
   Image01Icon,
   Logout01Icon,
   TagsIcon,
   UserCircle02Icon,
+  Activity01Icon,
+  Activity03FreeIcons,
 } from "@hugeicons/core-free-icons";
 import {
   Sidebar,
@@ -34,9 +35,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { signOut } from "@/lib/supabase/auth-actions";
+import Image from "next/image";
 
 const menuItems = [
-  { icon: Home01Icon, label: "All Memes", href: "/" },
+  { icon: DashboardCircleIcon, label: "Dashboard", href: "/" },
+  { icon: Image01Icon, label: "Meme Library", href: "/memes" },
   { icon: TagsIcon, label: "Tags", href: "/tags" },
   { icon: Activity01Icon, label: "Interactions", href: "/interactions" },
 ];
@@ -53,10 +56,10 @@ export function MemesSidebar({
     <Sidebar className="lg:border-r-0!" collapsible="offExamples" {...props}>
       <SidebarHeader className="p-4 pb-0">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-8 items-center justify-center rounded-lg bg-linear-to-br from-violet-500 to-fuchsia-500">
-            <HugeiconsIcon icon={Image01Icon} className="size-4 text-white" />
+          <div className="flex size-8 relative items-center justify-center rounded-md overflow-hidden">
+            <Image src="/meo-huh.gif" alt="Logo" fill className="object-contain" />
           </div>
-          <span className="font-semibold text-base">Meme Picker CMS</span>
+          <span className="font-semibold text-base">CMS</span>
         </div>
       </SidebarHeader>
 

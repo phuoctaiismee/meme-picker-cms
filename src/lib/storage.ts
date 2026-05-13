@@ -15,6 +15,7 @@ export interface StorageProvider {
   id: "cloudinary";
   upload: (input: StorageUploadInput) => Promise<StorageUploadResult>;
   getPublicUrl: (key: string, mediaType?: string | null) => string;
+  delete: (key: string, mediaType?: string | null) => Promise<void>;
 }
 
 function getCloudinaryConfig() {
@@ -77,6 +78,21 @@ export const cloudinaryStorageProvider: StorageProvider = {
 
     const resourceType = mediaType === "video" ? "video" : "image";
     return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/${key}`;
+  },
+  async delete(key, mediaType = "image") {
+    const { cloudName, apiKey, apiSecret } = getCloudinaryConfig();
+
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret,
+      secure: true,
+    });
+
+    const resourceType = mediaType === "video" ? "video" : "image";
+    await cloudinary.uploader.destroy(key, {
+      resource_type: resourceType,
+    });
   },
 };
 

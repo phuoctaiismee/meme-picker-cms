@@ -5,7 +5,10 @@ export type AdminAuditAction =
   | "meme.copy_media_key"
   | "meme.open_media"
   | "meme.update"
+  | "meme.deactivate"
+  | "meme.activate"
   | "meme.delete"
+  | "meme.delete_permanent"
   | "tag.create"
   | "tag.update"
   | "tag.delete";
