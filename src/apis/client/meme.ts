@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getStorageProvider } from "@/lib/storage";
 import { logAdminAction } from "./audit";
@@ -337,6 +338,101 @@ export const meme = {
           title: meme.title,
         },
       });
+    }
+  },
+
+  async suggest(context: string, limit: number = 5): Promise<Meme[]> {
+    const supabase = await createSupabaseServerClient();
+
+    // 1. Fetch all available tags to give context to the AI
+    const { data: tags, error: tagsError } = await supabase
+      .from("tags")
+      .select("name, slug");
+
+    if (tagsError || !tags) {
+      console.error("[suggest] Failed to fetch tags:", tagsError?.message);
+      return [];
+    }
+
+    console.log("[suggest] Total tags in DB:", tags.length, tags.map(t => t.slug));
+
+    const tagList = tags.map(t => `${t.name} (${t.slug})`).join(", ");
+
+    // 2. Use Gemini to analyze context and suggest tags
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn("[suggest] GEMINI_API_KEY is not set.");
+      return [];
+    }
+
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+
+      const prompt = `
+        You are a meme suggestion assistant.
+        A user is viewing a social media post with the following content:
+        "${context}"
+
+        Based on this context, select up to 3 most relevant meme tags from the following list:
+        ${tagList}
+
+        If no tags are relevant, return an empty string.
+        Output ONLY the slugs of the tags separated by commas. Do not include any other text or explanation.
+      `;
+
+      console.log("[suggest] Sending prompt to Gemini...");
+      const result = await model.generateContent(prompt);
+      const responseText = result.response.text().trim();
+      console.log("[suggest] Gemini raw response:", responseText);
+
+      const suggestedSlugs = responseText
+        .split(",")
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      console.log("[suggest] Suggested slugs:", suggestedSlugs);
+
+      if (suggestedSlugs.length === 0) return [];
+
+      // 3. Query memes based on suggested tags
+      const { data: tagRows } = await supabase
+        .from("tags")
+        .select("id")
+        .in("slug", suggestedSlugs);
+
+      console.log("[suggest] Matched tagRows:", tagRows?.length, tagRows?.map(t => t.id));
+
+      if (!tagRows || tagRows.length === 0) return [];
+
+      const tagIds = tagRows.map(t => t.id);
+      const { data: memeTagRows } = await supabase
+        .from("meme_tags")
+        .select("meme_id")
+        .in("tag_id", tagIds);
+
+      console.log("[suggest] memeTagRows count:", memeTagRows?.length);
+
+      if (!memeTagRows || memeTagRows.length === 0) return [];
+
+      const memeIds = Array.from(new Set(memeTagRows.map(mt => mt.meme_id))).slice(0, limit);
+
+      const { data: memes, error: memesError } = await supabase
+        .from("memes")
+        .select("id, media_key, title, storage_provider, media_type, ocr_content, access_tier, is_active, created_at, meme_tags(tags(id, name, slug, category))")
+        .in("id", memeIds)
+        .eq("is_active", true);
+
+      if (memesError || !memes) {
+        console.error("[suggest] Failed to fetch memes:", memesError?.message);
+        return [];
+      }
+
+      console.log("[suggest] Final memes count:", memes.length);
+      return (memes as any[]).map(mapMeme);
+    } catch (error) {
+      console.error("[suggest] AI error:", error);
+      return [];
     }
   },
 };
