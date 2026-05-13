@@ -3,6 +3,8 @@ import { getStorageProvider } from "@/lib/storage";
 import { logAdminAction } from "./audit";
 import type { Meme, MemeListData } from "@/apis/interfaces/memes";
 import type { MemeTag } from "@/apis/interfaces/tags";
+import type { PaginatedResult, PaginationParams } from "@/apis/interfaces/pagination";
+import { applyPaginationAndSorting } from "./utils";
 
 interface MemeTagJoin {
   tags: MemeTag | MemeTag[] | null;
@@ -53,6 +55,7 @@ function mapMeme(row: MemeRow): Meme {
 
 export interface CreateMemeInput {
   file: File;
+  title?: string;
   tags: { name: string; slug: string }[];
   ocr_content?: string;
   access_tier?: string;
@@ -83,6 +86,41 @@ export const meme = {
     };
   },
 
+  async list(params: PaginationParams): Promise<PaginatedResult<Meme>> {
+    const supabase = await createSupabaseServerClient();
+    const { page, pageSize, search } = params;
+
+    let query = supabase
+      .from("memes")
+      .select(
+        "id, media_key, title, storage_provider, media_type, ocr_content, access_tier, is_active, created_at, meme_tags(tags(id, name, slug, category))",
+        { count: "exact" }
+      )
+      .eq("is_active", true);
+
+    query = applyPaginationAndSorting(query, params, {
+      defaultSortBy: "created_at",
+      defaultSortOrder: "desc",
+    });
+
+    if (search?.trim()) {
+      const s = search.trim();
+      query = query.or(`title.ilike.%${s}%,media_key.ilike.%${s}%,ocr_content.ilike.%${s}%`);
+    }
+
+    const { data, error, count } = await query;
+    if (error) throw new Error(error.message);
+
+    const total = count ?? 0;
+    return {
+      data: ((data ?? []) as MemeRow[]).map(mapMeme),
+      total,
+      page,
+      pageSize,
+      pageCount: Math.max(1, Math.ceil(total / pageSize)),
+    };
+  },
+
   async create(input: CreateMemeInput): Promise<string> {
     const supabase = await createSupabaseServerClient();
     const storageProvider = getStorageProvider("cloudinary");
@@ -96,6 +134,7 @@ export const meme = {
       .from("memes")
       .insert({
         media_key: upload.key,
+        title: input.title || null,
         storage_provider: storageProvider.id,
         media_type: upload.mediaType,
         ocr_content: input.ocr_content || null,
@@ -146,24 +185,59 @@ export const meme = {
     return newMeme.id;
   },
 
-  async updateTitle(id: string, title: string | null): Promise<void> {
+  async update(id: string, input: Omit<CreateMemeInput, "file">): Promise<void> {
     const supabase = await createSupabaseServerClient();
-    const cleanTitle = title?.trim() || null;
 
-    const { data, error } = await supabase
+    const { data: updatedMeme, error: memeError } = await supabase
       .from("memes")
-      .update({ title: cleanTitle })
+      .update({
+        title: input.title || null,
+        ocr_content: input.ocr_content || null,
+        access_tier: input.access_tier || "free",
+        is_active: input.is_active ?? true,
+      })
       .eq("id", id)
       .select("id, media_key, title")
       .single();
 
-    if (error || !data) throw new Error(error?.message || "Failed to update meme title.");
+    if (memeError || !updatedMeme) {
+      throw new Error(memeError?.message || "Failed to update meme.");
+    }
+
+    // Update tags: Delete existing joins and recreate
+    await supabase.from("meme_tags").delete().eq("meme_id", id);
+
+    const tagRows = await Promise.all(
+      input.tags.map(async (tag) => {
+        const { data, error } = await supabase
+          .from("tags")
+          .upsert({ name: tag.name, slug: tag.slug, category: "general" }, { onConflict: "slug" })
+          .select("id")
+          .single();
+
+        if (error || !data) throw new Error(error?.message || `Failed to save tag ${tag.name}.`);
+        return data;
+      })
+    );
+
+    const { error: joinError } = await supabase.from("meme_tags").insert(
+      tagRows.map((tag) => ({
+        meme_id: id,
+        tag_id: tag.id,
+      }))
+    );
+
+    if (joinError) throw new Error(joinError.message);
 
     await logAdminAction({
       action: "meme.update",
       entityType: "meme",
-      entityId: data.id,
-      metadata: { media_key: data.media_key, title: data.title },
+      entityId: id,
+      metadata: {
+        media_key: updatedMeme.media_key,
+        title: updatedMeme.title,
+        tag_ids: tagRows.map((tag) => tag.id),
+      },
     });
   },
 

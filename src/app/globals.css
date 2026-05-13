@@ -115,16 +115,13 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-.root{
-  isolation: isolate;
-}
-
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   html {
     font-size: 17px;
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-background text-foreground;

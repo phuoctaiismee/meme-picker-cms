@@ -8,11 +8,21 @@ import {
   Menu01Icon,
   MoreVerticalIcon,
   Video01Icon,
+  Loading03Icon,
+  Pulse02Icon,
+  PlusSignIcon,
 } from "@hugeicons/core-free-icons";
 import { trackMemeInteractionAction } from "@/features/interactions/actions";
-import { updateMemeTitleAction, deleteMemeAction } from "@/features/memes/actions";
+import { deleteMemeAction } from "@/features/memes/actions";
+import { EditMemeDrawer } from "@/features/memes/components/edit-meme-drawer";
+import { DataTable } from "@/components/datas/table";
+import { Pagination } from "@/components/datas/table/pagination";
+import { createColumnHelper, type PaginationState, type SortingState, type OnChangeFn } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useModal } from "@/components/layouts/modal-provider";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -31,10 +41,21 @@ import {
 import { cn } from "@/lib/utils";
 import { useMemesStore } from "@/store/memes-store";
 import type { Meme, MemeTag } from "@/apis/interfaces/memes";
+import Link from "next/link";
+import Image from "next/image";
 
 interface MemeListProps {
   memes: Meme[];
   tags: MemeTag[];
+  isLoading?: boolean;
+  pagination: PaginationState;
+  onPaginationChange: (pagination: PaginationState) => void;
+  pageCount: number;
+  total: number;
+  search: string;
+  onSearchChange: (search: string) => void;
+  sorting: SortingState;
+  onSortingChange: OnChangeFn<SortingState>;
 }
 
 function formatDate(value: string) {
@@ -45,25 +66,6 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function matchesSearch(meme: Meme, query: string) {
-  const normalized = query.trim().toLowerCase();
-
-  if (!normalized) {
-    return true;
-  }
-
-  return (
-    meme.ocr_content?.toLowerCase().includes(normalized) ||
-    meme.media_key.toLowerCase().includes(normalized) ||
-    meme.tags.some((tag) => {
-      return (
-        tag.name.toLowerCase().includes(normalized) ||
-        tag.slug.toLowerCase().includes(normalized)
-      );
-    })
-  );
-}
-
 function trackInteraction(action: "meme.copy_media_key" | "meme.open_media", meme: Meme) {
   void trackMemeInteractionAction(action, {
     id: meme.id,
@@ -71,34 +73,155 @@ function trackInteraction(action: "meme.copy_media_key" | "meme.open_media", mem
   });
 }
 
-export function MemeList({ memes, tags }: MemeListProps) {
+const columnHelper = createColumnHelper<Meme>();
+
+export function MemeList({
+  memes,
+  tags,
+  isLoading,
+  pagination,
+  onPaginationChange,
+  pageCount,
+  total,
+  search,
+  onSearchChange,
+  sorting,
+  onSortingChange,
+}: MemeListProps) {
   const [editingMeme, setEditingMeme] = React.useState<Meme | null>(null);
-  const [deletingMeme, setDeletingMeme] = React.useState<Meme | null>(null);
+  const modal = useModal();
+  const queryClient = useQueryClient();
 
-  const { searchQuery, selectedTagSlug, setSelectedTagSlug, viewMode } =
-    useMemesStore();
+  const { selectedTagSlug, setSelectedTagSlug, viewMode } = useMemesStore();
 
-  const filteredMemes = memes.filter((meme) => {
-    const hasTag = selectedTagSlug
-      ? meme.tags.some((tag) => tag.slug === selectedTagSlug)
-      : true;
+  const handleDeleteMeme = (meme: Meme) => {
+    modal.show({
+      title: "Delete Meme",
+      description: `Are you sure you want to delete "${meme.title || meme.media_key}"? This action cannot be undone.`,
+      confirmText: "Delete",
+      variant: "destructive",
+      onConfirm: async () => {
+        const result = await deleteMemeAction(meme.id);
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        // Invalidate queries to revalidate data on the home page
+        await queryClient.invalidateQueries({ queryKey: ["memes"] });
+      },
+    });
+  };
 
-    return hasTag && matchesSearch(meme, searchQuery);
-  });
+  const columns = React.useMemo(
+    () => [
+      columnHelper.display({
+        id: "title",
+        header: "Media",
+        cell: (info) => (
+          <div className="flex items-center gap-3 min-w-0 max-w-[240px]">
+            <div className="size-12 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden relative">
+              <Image 
+                src={info.row.original.media_url} 
+                alt={info.row.original.title || info.row.original.media_key} 
+                fill
+                className="object-cover"
+                sizes="48px"
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium truncate" title={info.row.original.title || info.row.original.media_key}>
+                {info.row.original.title || info.row.original.media_key}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {formatDate(info.row.original.created_at)}
+              </p>
+            </div>
+          </div>
+        ),
+      }),
+      columnHelper.accessor("media_type", {
+        header: "Type",
+        cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor("access_tier", {
+        header: "Tier",
+        cell: (info) => <span className="text-sm text-muted-foreground">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor("created_at", {
+        header: "Created",
+        cell: (info) => <span className="text-sm text-muted-foreground">{formatDate(info.getValue())}</span>,
+      }),
+      columnHelper.accessor("tags", {
+        header: "Tags",
+        enableSorting: false,
+        cell: (info) => (
+          <div className="flex flex-wrap gap-1.5 max-w-[200px]">
+            {info.getValue().map((tag) => (
+              <span
+                key={tag.id}
+                className="rounded-md bg-muted px-2 py-1 text-xs"
+              >
+                {tag.name}
+              </span>
+            ))}
+          </div>
+        ),
+      }),
+      columnHelper.display({
+        id: "actions",
+        header: "Actions",
+        cell: (info) => {
+          const meme = info.row.original;
+          return (
+            <div className="flex justify-end">
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button variant="ghost" size="icon" className="size-8">
+                      <HugeiconsIcon icon={MoreVerticalIcon} className="size-4" />
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="end">
+                  <DropdownMenuGroup>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        void navigator.clipboard.writeText(meme.media_key);
+                        trackInteraction("meme.copy_media_key", meme);
+                      }}
+                    >
+                      Copy media key
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => {
+                        window.open(meme.media_url, "_blank", "noopener,noreferrer");
+                        trackInteraction("meme.open_media", meme);
+                      }}
+                    >
+                      Open media
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setEditingMeme(meme)}>
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem variant="destructive" onClick={() => handleDeleteMeme(meme)}>
+                      Delete meme
+                    </DropdownMenuItem>
+                  </DropdownMenuGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        },
+      }),
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  );
 
   return (
     <div className="flex flex-col xl:flex-row gap-6 p-4 md:p-6">
       <div className="flex-1 min-w-0 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="text-lg font-semibold">Meme Library</h1>
-            <p className="text-sm text-muted-foreground">
-              {filteredMemes.length} active memes
-            </p>
-          </div>
-        </div>
 
-        {filteredMemes.length === 0 ? (
+        {memes.length === 0 && !isLoading ? (
           <div className="flex flex-col items-center justify-center rounded-xl border bg-card py-16 text-center">
             <div className="size-16 rounded-2xl bg-muted flex items-center justify-center mb-4">
               <HugeiconsIcon
@@ -107,154 +230,170 @@ export function MemeList({ memes, tags }: MemeListProps) {
               />
             </div>
             <h2 className="font-medium text-lg mb-1">No memes found</h2>
-            <p className="text-sm text-muted-foreground max-w-xs">
-              Upload a meme or adjust the current search and tag filter.
+            <p className="text-sm text-muted-foreground max-w-xs mb-2.5">
+              Upload a meme or adjust the current search.
             </p>
+            <Link href={'/create'}>
+              <Button type="button" variant="outline" size="sm">
+                <HugeiconsIcon icon={PlusSignIcon}/>Create Now
+              </Button>
+            </Link>
           </div>
         ) : viewMode === "grid" ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-            {filteredMemes.map((meme) => (
-              <article
-                key={meme.id}
-                className="rounded-xl border bg-card overflow-hidden"
-              >
-                <div className="aspect-video bg-muted">
-                  {meme.media_type === "video" ? (
-                    <video
-                      src={meme.media_url}
-                      controls
-                      className="size-full object-cover"
-                    />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={meme.media_url}
-                      alt={meme.title || meme.ocr_content || meme.media_key}
-                      className="size-full object-cover"
-                    />
-                  )}
-                </div>
-                <div className="p-3 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm truncate" title={meme.title || meme.media_key}>
-                        {meme.title || meme.media_key}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(meme.created_at)} · {meme.access_tier}
-                      </p>
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 relative">
+              {isLoading && memes.length === 0 ? (
+                Array.from({ length: pagination.pageSize }).map((_, i) => (
+                  <div key={`skeleton-${i}`} className="rounded-xl border bg-card overflow-hidden space-y-3 p-3">
+                    <Skeleton className="aspect-video w-full rounded-lg" />
+                    <div className="space-y-2">
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-3 w-1/2" />
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger
-                        render={
-                          <Button variant="ghost" size="icon" className="size-8">
-                            <HugeiconsIcon
-                              icon={MoreVerticalIcon}
-                              className="size-4"
+                    <div className="flex gap-1.5">
+                      <Skeleton className="h-5 w-12" />
+                      <Skeleton className="h-5 w-16" />
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <>
+                  {isLoading && memes.length > 0 && (
+                    <div className="absolute inset-0 bg-background/30 z-10 flex items-center justify-center backdrop-blur-[1px] rounded-xl">
+                      <HugeiconsIcon icon={Loading03Icon} className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                  )}
+                  {memes.map((meme) => (
+                    <article
+                      key={meme.id}
+                      className="rounded-xl border bg-card overflow-hidden"
+                    >
+                      <div className="aspect-video bg-muted relative">
+                        {meme.media_type === "video" ? (
+                          <video
+                            src={meme.media_url}
+                            controls
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <Image
+                            src={meme.media_url}
+                            alt={meme.title || meme.ocr_content || meme.media_key}
+                            fill
+                            className="object-cover"
+                          />
+                        )}
+                      </div>
+                      <div className="p-3 space-y-3">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="font-medium text-sm truncate" title={meme.title || meme.media_key}>
+                              {meme.title || meme.media_key}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatDate(meme.created_at)} · {meme.access_tier}
+                            </p>
+                          </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              render={
+                                <Button variant="ghost" size="icon" className="size-8">
+                                  <HugeiconsIcon
+                                    icon={MoreVerticalIcon}
+                                    className="size-4"
+                                  />
+                                </Button>
+                              }
                             />
-                          </Button>
-                        }
-                      />
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuGroup>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              void navigator.clipboard.writeText(meme.media_key);
-                              trackInteraction("meme.copy_media_key", meme);
-                            }}
-                          >
-                            Copy media key
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => {
-                              window.open(meme.media_url, "_blank", "noopener,noreferrer");
-                              trackInteraction("meme.open_media", meme);
-                            }}
-                          >
-                            Open media
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setEditingMeme(meme)}
-                          >
-                            Edit name
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => setDeletingMeme(meme)}
-                          >
-                            Delete meme
-                          </DropdownMenuItem>
-                        </DropdownMenuGroup>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {meme.tags.map((tag) => (
-                      <Button
-                        key={tag.id}
-                        type="button"
-                        variant="secondary"
-                        size="xs"
-                        className="rounded-md bg-muted px-2 py-1 text-xs"
-                        onClick={() => setSelectedTagSlug(tag.slug)}
-                      >
-                        {tag.name}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </article>
-            ))}
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuGroup>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    void navigator.clipboard.writeText(meme.media_key);
+                                    trackInteraction("meme.copy_media_key", meme);
+                                  }}
+                                >
+                                  Copy media key
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => {
+                                    window.open(meme.media_url, "_blank", "noopener,noreferrer");
+                                    trackInteraction("meme.open_media", meme);
+                                  }}
+                                >
+                                  Open media
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => setEditingMeme(meme)}
+                                >
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  variant="destructive"
+                                  onClick={() => handleDeleteMeme(meme)}
+                                >
+                                  Delete meme
+                                </DropdownMenuItem>
+                              </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {meme.tags.map((tag) => (
+                            <Button
+                              key={tag.id}
+                              type="button"
+                              variant="secondary"
+                              size="xs"
+                              className="rounded-md bg-muted px-2 py-1 text-xs"
+                              onClick={() => setSelectedTagSlug(tag.slug)}
+                            >
+                              {tag.name}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+                </>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between px-2 pt-4 border-t">
+              <div className="text-sm text-muted-foreground font-medium">
+                {isLoading && memes.length === 0 ? (
+                  <Skeleton className="h-4 w-32" />
+                ) : (
+                  <>Showing {memes.length} of {total.toLocaleString()} memes</>
+                )}
+              </div>
+              <Pagination
+                pageCount={pageCount}
+                currentPage={pagination.pageIndex}
+                onPageChange={(page) => onPaginationChange({ ...pagination, pageIndex: page })}
+                disabled={isLoading}
+              />
+            </div>
           </div>
         ) : (
-          <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="hidden md:grid grid-cols-[1.4fr_120px_120px_1fr] gap-4 px-4 py-3 border-b bg-muted/50 text-xs font-medium text-muted-foreground">
-              <span>Meme</span>
-              <span>Type</span>
-              <span>Tier</span>
-              <span>Tags</span>
-            </div>
-            <div className="divide-y">
-              {filteredMemes.map((meme) => (
-                <div
-                  key={meme.id}
-                  className="grid grid-cols-1 md:grid-cols-[1.4fr_120px_120px_1fr] gap-3 px-4 py-3 items-center"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="size-12 rounded-lg bg-muted flex items-center justify-center shrink-0 overflow-hidden">
-                      <HugeiconsIcon
-                        icon={meme.media_type === "video" ? Video01Icon : Image01Icon}
-                        className="size-5 text-muted-foreground"
-                      />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium truncate" title={meme.title || meme.media_key}>
-                        {meme.title || meme.media_key}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatDate(meme.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {meme.media_type}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {meme.access_tier}
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {meme.tags.map((tag) => (
-                      <span
-                        key={tag.id}
-                        className="rounded-md bg-muted px-2 py-1 text-xs"
-                      >
-                        {tag.name}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
+          <div className="rounded-xl border bg-card overflow-hidden p-2">
+            <DataTable
+              columns={columns}
+              data={memes}
+              searchPlaceholder="Filter memes in table..."
+              manualPagination={true}
+              manualFiltering={true}
+              manualSorting={true}
+              pageCount={pageCount}
+              total={total}
+              pagination={pagination}
+              onPaginationChange={onPaginationChange}
+              globalFilter={search}
+              onGlobalFilterChange={onSearchChange}
+              sorting={sorting}
+              onSortingChange={onSortingChange}
+              isLoading={isLoading}
+            />
           </div>
         )}
       </div>
@@ -268,28 +407,35 @@ export function MemeList({ memes, tags }: MemeListProps) {
               size="sm"
               onClick={() => setSelectedTagSlug(null)}
               className={cn(!selectedTagSlug && "bg-muted")}
+              disabled={isLoading && tags.length === 0}
             >
               All
             </Button>
           </div>
           <div className="flex flex-wrap gap-2">
-            {tags.map((tag) => (
-              <Button
-                key={tag.id}
-                type="button"
-                variant={selectedTagSlug === tag.slug ? "default" : "outline"}
-                size="xs"
-                className={cn(
-                  "rounded-md border px-2.5 py-1.5 text-xs transition-colors",
-                  selectedTagSlug === tag.slug
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background hover:bg-muted"
-                )}
-                onClick={() => setSelectedTagSlug(tag.slug)}
-              >
-                {tag.name}
-              </Button>
-            ))}
+            {isLoading && tags.length === 0 ? (
+              Array.from({ length: 12 }).map((_, i) => (
+                <Skeleton key={`tag-skeleton-${i}`} className="h-7 w-16 rounded-md" />
+              ))
+            ) : (
+              tags.map((tag) => (
+                <Button
+                  key={tag.id}
+                  type="button"
+                  variant={selectedTagSlug === tag.slug ? "default" : "outline"}
+                  size="xs"
+                  className={cn(
+                    "rounded-md border px-2.5 py-1.5 text-xs transition-colors",
+                    selectedTagSlug === tag.slug
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-background hover:bg-muted"
+                  )}
+                  onClick={() => setSelectedTagSlug(tag.slug)}
+                >
+                  {tag.name}
+                </Button>
+              ))
+            )}
           </div>
         </div>
 
@@ -301,90 +447,28 @@ export function MemeList({ memes, tags }: MemeListProps) {
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-muted-foreground text-xs">Memes</p>
-              <p className="font-medium">{memes.length}</p>
+              {isLoading && memes.length === 0 ? (
+                <Skeleton className="h-5 w-12 mt-1" />
+              ) : (
+                <p className="font-medium">{total.toLocaleString()}</p>
+              )}
             </div>
             <div>
               <p className="text-muted-foreground text-xs">Tags</p>
-              <p className="font-medium">{tags.length}</p>
+              {isLoading && tags.length === 0 ? (
+                <Skeleton className="h-5 w-8 mt-1" />
+              ) : (
+                <p className="font-medium">{tags.length}</p>
+              )}
             </div>
           </div>
         </div>
       </aside>
-
-      <Dialog
+      <EditMemeDrawer
+        meme={editingMeme}
         open={!!editingMeme}
         onOpenChange={(open) => !open && setEditingMeme(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Meme Name</DialogTitle>
-            <DialogDescription>
-              Enter a new name for this meme to make it easier to find.
-            </DialogDescription>
-          </DialogHeader>
-          <form
-            action={async (formData) => {
-              if (editingMeme) {
-                const title = formData.get("title") as string;
-                await updateMemeTitleAction(editingMeme.id, title);
-                setEditingMeme(null);
-              }
-            }}
-          >
-            <Input
-              name="title"
-              defaultValue={editingMeme?.title || ""}
-              placeholder={editingMeme?.media_key || "e.g. Funny Cat"}
-              autoFocus
-            />
-            <DialogFooter className="mt-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setEditingMeme(null)}
-              >
-                Cancel
-              </Button>
-              <Button type="submit">Save</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!deletingMeme}
-        onOpenChange={(open) => !open && setDeletingMeme(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Meme</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this meme? It will be removed from suggestions.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="mt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDeletingMeme(null)}
-            >
-              Cancel
-            </Button>
-            <form
-              action={async () => {
-                if (deletingMeme) {
-                  await deleteMemeAction(deletingMeme.id);
-                  setDeletingMeme(null);
-                }
-              }}
-            >
-              <Button type="submit" variant="destructive">
-                Confirm Delete
-              </Button>
-            </form>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      />
     </div>
   );
 }

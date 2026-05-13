@@ -1,12 +1,9 @@
-import { TagManagement } from "@/features/tags/components/tag-management";
-import { appClient } from "@/apis/client";
+import { TagsScreen } from "@/features/tags";
 
-export default async function TagsPage() {
-  const data = await appClient.tag.getAll();
-
+export default function TagsPage() {
   return (
     <main className="flex-1 overflow-auto w-full">
-      <TagManagement initialData={data} />
+      <TagsScreen />
     </main>
   );
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { appClient } from "@/apis/client";
 import { getAdminDatabaseErrorMessage } from "@/apis/client/audit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { parsePaginationParams } from "@/lib/api-utils";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -9,15 +10,16 @@ export async function GET(request: Request) {
   const query = searchParams.get("q")?.trim();
 
   if (mode === "management") {
+    const params = parsePaginationParams(request.url);
     try {
-      return NextResponse.json(await appClient.tag.getAll());
+      return NextResponse.json(await appClient.tag.list(params));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load tags.";
       return NextResponse.json({ error: message }, { status: 500 });
     }
   }
 
-  // Auto-complete simple list
+  // Auto-complete simple list (for tag search in create-meme-form)
   const supabase = await createSupabaseServerClient();
   let builder = supabase
     .from("tags")

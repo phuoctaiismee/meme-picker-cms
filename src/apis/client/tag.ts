@@ -1,7 +1,9 @@
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { logAdminAction } from "./audit";
 import { slugifyTag } from "@/lib/slug";
-import type { MemeTag, TagManagementData } from "@/apis/interfaces/tags";
+import type { MemeTag, TagManagementData, ManagedTag } from "@/apis/interfaces/tags";
+import type { PaginatedResult, PaginationParams } from "@/apis/interfaces/pagination";
+import { applyPaginationAndSorting } from "./utils";
 
 export interface CreateTagInput {
   name: string;
@@ -38,6 +40,57 @@ export const tag = {
         ...t,
         usage_count: usageCounts.get(t.id) ?? 0,
       })),
+    };
+  },
+
+  async list(params: PaginationParams): Promise<PaginatedResult<ManagedTag>> {
+    const supabase = await createSupabaseServerClient();
+    const { page, pageSize, search } = params;
+
+    let query = supabase
+      .from("tags")
+      .select("id, name, slug, category", { count: "exact" });
+
+    query = applyPaginationAndSorting(query, params, {
+      defaultSortBy: "name",
+      defaultSortOrder: "asc",
+    });
+
+    if (search?.trim()) {
+      const s = search.trim();
+      query = query.or(`name.ilike.%${s}%,slug.ilike.%${s}%,category.ilike.%${s}%`);
+    }
+
+    const { data: tagRows, error: tagsError, count } = await query;
+    if (tagsError) throw new Error(tagsError.message);
+
+    // Fetch usage counts for this page of tags only
+    const tagIds = (tagRows ?? []).map((t: any) => t.id);
+    const { data: joinRows, error: joinsError } = tagIds.length
+      ? await supabase
+          .from("meme_tags")
+          .select("tag_id, memes!inner(id)")
+          .in("tag_id", tagIds)
+          .eq("memes.is_active", true)
+      : { data: [], error: null };
+
+    if (joinsError) throw new Error(joinsError.message);
+
+    const usageCounts = new Map<number, number>();
+    for (const join of (joinRows ?? []) as { tag_id: number }[]) {
+      usageCounts.set(join.tag_id, (usageCounts.get(join.tag_id) ?? 0) + 1);
+    }
+
+    const total = count ?? 0;
+    return {
+      data: ((tagRows ?? []) as MemeTag[]).map((t) => ({
+        ...t,
+        usage_count: usageCounts.get(t.id) ?? 0,
+      })),
+      total,
+      page,
+      pageSize,
+      pageCount: Math.max(1, Math.ceil(total / pageSize)),
     };
   },
 

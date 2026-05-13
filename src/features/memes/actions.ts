@@ -10,7 +10,7 @@ export interface CreateMemeState {
   error?: string;
 }
 
-const maxUploadBytes = 25 * 1024 * 1024;
+const maxUploadBytes = 10 * 1024 * 1024; // Align with Next.js limit
 
 function getFile(formData: FormData) {
   const file = formData.get("file");
@@ -24,7 +24,7 @@ function getFile(formData: FormData) {
   }
 
   if (file.size > maxUploadBytes) {
-    throw new Error("Uploads must be 25 MB or smaller.");
+    throw new Error("Uploads must be 10 MB or smaller.");
   }
 
   return file;
@@ -42,12 +42,14 @@ export async function createMemeAction(
       return { error: "Add at least one tag." };
     }
 
+    const title = String(formData.get("title") ?? "").trim() || undefined;
     const ocr_content = String(formData.get("ocr_content") ?? "").trim() || undefined;
     const access_tier = String(formData.get("access_tier") ?? "free");
     const is_active = formData.get("is_active") === "on";
 
     await appClient.meme.create({
       file,
+      title,
       tags,
       ocr_content,
       access_tier,
@@ -64,9 +66,27 @@ export async function createMemeAction(
   redirect("/");
 }
 
-export async function updateMemeTitleAction(id: string, title: string | null) {
+export async function updateMemeAction(id: string, formData: FormData) {
   try {
-    await appClient.meme.updateTitle(id, title);
+    const tags = parseTags(formData.get("tags"));
+
+    if (tags.length === 0) {
+      return { error: "Add at least one tag." };
+    }
+
+    const title = String(formData.get("title") ?? "").trim() || undefined;
+    const ocr_content = String(formData.get("ocr_content") ?? "").trim() || undefined;
+    const access_tier = String(formData.get("access_tier") ?? "free");
+    const is_active = formData.get("is_active") === "on";
+
+    await appClient.meme.update(id, {
+      title,
+      tags,
+      ocr_content,
+      access_tier,
+      is_active,
+    });
+
     revalidatePath("/");
     return { success: true };
   } catch (error) {
