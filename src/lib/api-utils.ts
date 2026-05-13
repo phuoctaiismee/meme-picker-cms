@@ -15,6 +15,7 @@ export function parsePaginationParams(url: string): PaginationParams {
   const sortOrder = (searchParams.get("sortOrder") as "asc" | "desc") ?? undefined;
 
   const status = (searchParams.get("status") as "all" | "active" | "inactive") ?? undefined;
+  const tags = searchParams.get("tags") ?? undefined;
   
   return {
     page,
@@ -23,5 +24,6 @@ export function parsePaginationParams(url: string): PaginationParams {
     sortBy,
     sortOrder,
     status,
+    tags,
   };
 }

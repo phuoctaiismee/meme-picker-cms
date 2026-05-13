@@ -218,12 +218,12 @@ export function CreateMemeForm() {
 
       <aside className="space-y-6">
         <div className="sticky top-6">
-          <div className="overflow-hidden rounded-2xl border bg-muted shadow-sm aspect-[4/5] relative flex items-center justify-center">
+          <div className="overflow-hidden rounded-2xl p-2 border bg-muted shadow-sm aspect-4/5 relative flex items-center justify-center">
             {previewUrl && previewType === "video" ? (
-              <video src={previewUrl} controls className="size-full object-contain" />
+              <video src={previewUrl} controls className="size-full object-cover rounded-lg" />
             ) : previewUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="Meme preview" className="size-full object-contain" />
+              <img src={previewUrl} alt="Meme preview" className="size-full object-cover rounded-lg" />
             ) : (
               <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
                 <div className="size-12 rounded-full bg-background flex items-center justify-center mb-4 border shadow-sm">
@@ -234,12 +234,12 @@ export function CreateMemeForm() {
               </div>
             )}
           </div>
-          
+
           <div className="mt-4 rounded-xl border bg-primary/5 p-4 text-xs text-muted-foreground flex gap-3">
-             <HugeiconsIcon icon={InformationCircleIcon} className="size-4 shrink-0 text-primary" />
-             <p>
-               Meme details will be saved to the database, and media will be hosted on Cloudinary for global edge delivery.
-             </p>
+            <HugeiconsIcon icon={InformationCircleIcon} className="size-4 shrink-0 text-primary" />
+            <p>
+              Meme details will be saved to the database, and media will be hosted on Cloudinary for global edge delivery.
+            </p>
           </div>
         </div>
       </aside>

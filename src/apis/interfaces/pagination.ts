@@ -14,4 +14,5 @@ export interface PaginationParams {
   sortBy?: string;
   sortOrder?: "asc" | "desc";
   status?: "all" | "active" | "inactive";
+  tags?: string;
 }

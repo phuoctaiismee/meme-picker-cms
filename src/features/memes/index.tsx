@@ -6,6 +6,8 @@ import type { Meme, MemeTag } from "@/apis/interfaces/memes";
 import type { PaginatedResult } from "@/apis/interfaces/pagination";
 import { useTableState, getTableSearchParams } from "@/components/datas/table/use-table-state";
 
+import { useMemesStore } from "@/store/memes-store";
+
 async function getMemes(apiParams: any): Promise<PaginatedResult<Meme>> {
   const params = getTableSearchParams(apiParams);
   const response = await fetch(`/api/memes?${params.toString()}`);
@@ -30,6 +32,7 @@ async function getTags(): Promise<{ tags: MemeTag[] }> {
 }
 
 export function MemeScreen() {
+  const selectedTagSlugs = useMemesStore((state) => state.selectedTagSlugs);
   const {
     pagination,
     setPagination,
@@ -42,9 +45,14 @@ export function MemeScreen() {
     apiParams,
   } = useTableState();
 
+  const fullApiParams = {
+    ...apiParams,
+    tags: selectedTagSlugs.length > 0 ? selectedTagSlugs.join(",") : undefined,
+  };
+
   const { data: memesData, isLoading: isLoadingMemes, isFetching: isFetchingMemes } = useQuery({
-    queryKey: ["memes", apiParams],
-    queryFn: () => getMemes(apiParams),
+    queryKey: ["memes", fullApiParams],
+    queryFn: () => getMemes(fullApiParams),
     placeholderData: (previousData) => previousData,
   });
 
@@ -56,8 +64,8 @@ export function MemeScreen() {
   const isInitialLoading = isLoadingTags && !tagsData;
 
   return (
-    <MemeList 
-      memes={memesData?.data ?? []} 
+    <MemeList
+      memes={memesData?.data ?? []}
       tags={tagsData?.tags ?? []}
       isLoading={isLoadingMemes || isFetchingMemes || isInitialLoading}
       pagination={pagination}

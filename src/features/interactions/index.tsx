@@ -146,14 +146,7 @@ export function InteractionsScreen() {
 
   return (
     <div className="p-4 md:p-6 space-y-10 w-full">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold">Interaction Management</h1>
-          <p className="text-sm text-muted-foreground">
-            Review user interactions and CMS admin audit events.
-          </p>
-        </div>
-      </div>
+
 
       <section className="space-y-4">
         <div>

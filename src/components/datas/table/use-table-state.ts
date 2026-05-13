@@ -49,6 +49,7 @@ export function getTableSearchParams(apiParams: any) {
   });
   if (apiParams.search) params.set("search", apiParams.search);
   if (apiParams.status) params.set("status", apiParams.status);
+  if (apiParams.tags) params.set("tags", apiParams.tags);
   if (apiParams.sortBy) {
     params.set("sortBy", apiParams.sortBy);
     params.set("sortOrder", apiParams.sortOrder || "asc");

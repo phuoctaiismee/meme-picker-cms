@@ -10,8 +10,7 @@ import {
   Logout01Icon,
   TagsIcon,
   UserCircle02Icon,
-  Activity01Icon,
-  Activity03FreeIcons,
+  Activity01Icon
 } from "@hugeicons/core-free-icons";
 import {
   Sidebar,
@@ -44,13 +43,33 @@ const menuItems = [
   { icon: Activity01Icon, label: "Interactions", href: "/interactions" },
 ];
 
+function getInitials(nameOrEmail?: string) {
+  if (!nameOrEmail || nameOrEmail === "Chưa cập nhật") return "AD";
+  if (nameOrEmail.includes("@")) {
+    return nameOrEmail.split("@")[0].slice(0, 2).toUpperCase();
+  }
+  const words = nameOrEmail.trim().split(/\s+/);
+  if (words.length >= 2) {
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+  return nameOrEmail.slice(0, 2).toUpperCase();
+}
+
 export function MemesSidebar({
   userEmail,
+  userName,
+  avatarUrl,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   userEmail?: string;
+  userName?: string;
+  avatarUrl?: string;
 }) {
   const pathname = usePathname();
+
+  const displayEmail = userEmail || "";
+  const displayName = userName || (displayEmail ? displayEmail.split('@')[0] : "Admin");
+  const fallbackInitials = getInitials(userName || displayEmail);
 
   return (
     <Sidebar className="lg:border-r-0!" collapsible="offExamples" {...props}>
@@ -64,7 +83,7 @@ export function MemesSidebar({
       </SidebarHeader>
 
       <SidebarContent className="px-4 pt-6">
-        <Button render={<Link href="/create" />} className="w-full mb-4 gap-2">
+        <Button render={<Link href="/create" />} className="w-full mb-4">
           <HugeiconsIcon icon={Add01Icon} className="size-4" />
           Create Meme
         </Button>
@@ -108,15 +127,17 @@ export function MemesSidebar({
                 className="flex w-full items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-accent transition-colors text-left"
               >
                 <Avatar className="size-8">
-                  <AvatarImage src="/ln.png" />
+                  {avatarUrl && <AvatarImage src={avatarUrl} />}
                   <AvatarFallback className="text-xs">
-                    {userEmail?.slice(0, 2).toUpperCase() ?? "AD"}
+                    {fallbackInitials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">Admin</p>
+                  <p className="font-medium text-sm truncate">
+                    {displayName}
+                  </p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {userEmail}
+                    {displayEmail || "Chưa cập nhật"}
                   </p>
                 </div>
               </Button>
@@ -124,7 +145,7 @@ export function MemesSidebar({
           />
           <DropdownMenuContent align="end" className="w-[200px]">
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem render={<Link href="/profile" />}>
                 <HugeiconsIcon
                   icon={UserCircle02Icon}
                   className="size-4 mr-2"
@@ -135,6 +156,7 @@ export function MemesSidebar({
             <DropdownMenuSeparator />
             <form action={signOut}>
               <DropdownMenuItem
+                nativeButton
                 render={<button type="submit" className="w-full" />}
                 variant="destructive"
               >

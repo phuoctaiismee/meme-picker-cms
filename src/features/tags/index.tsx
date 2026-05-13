@@ -1,11 +1,30 @@
 "use client";
 
+import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { createColumnHelper } from "@tanstack/react-table";
 import { DataTable } from "@/components/datas/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { useModal } from "@/components/layouts/modal-provider";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Edit01Icon,
+  Cancel01Icon,
+  Loading03Icon,
+  InformationCircleIcon,
+} from "@hugeicons/core-free-icons";
 import type { ManagedTag } from "@/apis/interfaces/tags";
 import type { PaginatedResult } from "@/apis/interfaces/pagination";
 import { useTableState, getTableSearchParams } from "@/components/datas/table/use-table-state";
@@ -24,100 +43,153 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return data;
 }
 
-function EditableTagActions({ tag }: { tag: ManagedTag }) {
+function EditTagDialog({
+  tag,
+  open,
+  onOpenChange,
+}: {
+  tag: ManagedTag | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const queryClient = useQueryClient();
-  const deleteMutation = useMutation({
-    mutationFn: () =>
-      requestJson(`/api/tags/${tag.id}`, {
-        method: "DELETE",
-      }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tags", "management"] }),
-  });
 
-  return (
-    <div className="flex justify-end gap-2">
-      <Button
-        type="button"
-        variant="destructive"
-        size="sm"
-        disabled={tag.usage_count > 0 || deleteMutation.isPending}
-        onClick={() => deleteMutation.mutate()}
-      >
-        {deleteMutation.isPending ? "Deleting..." : "Delete"}
-      </Button>
-    </div>
-  );
-}
-
-const EditableCell = ({
-  getValue,
-  row,
-  column,
-}: any) => {
-  const initialValue = getValue();
-  const [value, setValue] = useState(initialValue);
-  const queryClient = useQueryClient();
+  React.useEffect(() => {
+    if (tag) {
+      setName(tag.name || "");
+      setCategory(tag.category || "");
+      setError(null);
+    }
+  }, [tag]);
 
   const updateMutation = useMutation({
     mutationFn: () =>
-      requestJson(`/api/tags/${row.original.id}`, {
+      requestJson(`/api/tags/${tag?.id}`, {
         method: "PATCH",
-        body: JSON.stringify({ [column.id]: value }),
+        body: JSON.stringify({ name: name.trim(), category: category.trim() || null }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tags", "management"] });
+      onOpenChange(false);
+    },
+    onError: (err: any) => {
+      setError(err.message || "Failed to update tag.");
     },
   });
 
-  const onBlur = () => {
-    if (value !== initialValue) {
-      updateMutation.mutate();
-    }
-  };
+  if (!tag) return null;
 
   return (
-    <div className="flex items-center gap-2">
-      <Input
-        value={value ?? ""}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={onBlur}
-        className="h-8 text-sm"
-        disabled={updateMutation.isPending}
-      />
-    </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <div className="p-2 rounded-lg bg-primary/10 text-primary">
+              <HugeiconsIcon icon={Edit01Icon} className="size-5" />
+            </div>
+            <div>
+              <DialogTitle>Edit Tag</DialogTitle>
+              <DialogDescription>Update tag details and category.</DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <form
+          id="edit-tag-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(null);
+            if (!name.trim()) {
+              setError("Tag name is required.");
+              return;
+            }
+            updateMutation.mutate();
+          }}
+          className="space-y-4 pt-2"
+        >
+          {error && (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-2.5 text-xs text-destructive flex items-center gap-2">
+              <HugeiconsIcon icon={InformationCircleIcon} className="size-4 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor="edit-tag-name"
+              className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider"
+            >
+              Tag Name <span className="text-destructive">*</span>
+            </label>
+            <Input
+              id="edit-tag-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. funny"
+              required
+              disabled={updateMutation.isPending}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor="edit-tag-category"
+              className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider"
+            >
+              Category
+            </label>
+            <Input
+              id="edit-tag-category"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="e.g. reaction"
+              disabled={updateMutation.isPending}
+            />
+          </div>
+        </form>
+
+        <DialogFooter className="pt-4 border-t mt-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            disabled={updateMutation.isPending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            form="edit-tag-form"
+            size="sm"
+            disabled={updateMutation.isPending}
+          >
+            {updateMutation.isPending ? (
+              <>
+                <HugeiconsIcon icon={Loading03Icon} className="size-3.5 animate-spin mr-1.5" />
+                Saving...
+              </>
+            ) : (
+              "Save changes"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
-};
+}
 
 const columnHelper = createColumnHelper<ManagedTag>();
-
-const columns = [
-  columnHelper.accessor("name", {
-    header: "Name",
-    cell: (info) => <EditableCell {...info} />,
-  }),
-  columnHelper.accessor("slug", {
-    header: "Slug",
-    cell: (info) => <span className="text-xs text-muted-foreground">{info.getValue()}</span>,
-  }),
-  columnHelper.accessor("category", {
-    header: "Category",
-    cell: (info) => <EditableCell {...info} />,
-  }),
-  columnHelper.accessor("usage_count", {
-    header: "Usage",
-    cell: (info) => <span className="text-muted-foreground">{info.getValue()}</span>,
-  }),
-  columnHelper.display({
-    id: "actions",
-    header: "Actions",
-    cell: (info) => <EditableTagActions tag={info.row.original} />,
-  }),
-];
 
 export function TagsScreen() {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
+  const [editingTag, setEditingTag] = useState<ManagedTag | null>(null);
+  const modal = useModal();
 
   const {
     pagination,
@@ -152,15 +224,109 @@ export function TagsScreen() {
     },
   });
 
+  const handleDeleteTag = React.useCallback(
+    (tag: ManagedTag) => {
+      if (tag.usage_count > 0) return;
+
+      modal.show({
+        title: "Delete Tag?",
+        description: `Are you sure you want to permanently delete the tag "#${tag.name}"? This action cannot be undone.`,
+        confirmText: "Delete Tag",
+        variant: "destructive",
+        onConfirm: async () => {
+          await requestJson(`/api/tags/${tag.id}`, { method: "DELETE" });
+          await queryClient.invalidateQueries({ queryKey: ["tags", "management"] });
+        },
+      });
+    },
+    [modal, queryClient]
+  );
+
+  const columns = React.useMemo(
+    () => [
+      columnHelper.accessor("name", {
+        header: "Name",
+        cell: (info) => <span className="font-semibold text-sm">#{info.getValue()}</span>,
+      }),
+      columnHelper.accessor("slug", {
+        header: "Slug",
+        cell: (info) => <span className="text-xs text-muted-foreground">{info.getValue()}</span>,
+      }),
+      columnHelper.accessor("category", {
+        header: "Category",
+        cell: (info) => {
+          const val = info.getValue();
+          if (!val) return <span className="text-muted-foreground/50 text-xs">—</span>;
+          return (
+            <span className="inline-flex text-[10px] bg-muted px-2 py-0.5 rounded font-semibold text-muted-foreground uppercase tracking-wider">
+              {val}
+            </span>
+          );
+        },
+      }),
+      columnHelper.accessor("usage_count", {
+        header: "Usage",
+        enableSorting: false,
+        cell: (info) => <span className="font-medium text-sm">{info.getValue()}</span>,
+      }),
+      columnHelper.display({
+        id: "actions",
+        header: "Actions",
+        cell: (info) => {
+          const tag = info.row.original;
+          return (
+            <div className="flex justify-end gap-1">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="size-7 text-muted-foreground hover:text-primary hover:bg-primary/10 cursor-pointer"
+                      onClick={() => setEditingTag(tag)}
+                    >
+                      <HugeiconsIcon icon={Edit01Icon} className="size-3.5" />
+                    </Button>
+                  }
+                />
+                <TooltipContent>Edit tag</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <span className={cn("inline-block", tag.usage_count > 0 && "cursor-not-allowed")}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className={cn(
+                          "size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10 cursor-pointer",
+                          tag.usage_count > 0 && "opacity-50 pointer-events-none"
+                        )}
+                        onClick={() => handleDeleteTag(tag)}
+                      >
+                        <HugeiconsIcon icon={Cancel01Icon} className="size-3.5" />
+                      </Button>
+                    </span>
+                  }
+                />
+                <TooltipContent>
+                  {tag.usage_count > 0 ? "Cannot delete tag currently in use" : "Delete tag"}
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          );
+        },
+      }),
+    ],
+    [handleDeleteTag]
+  );
+
   return (
     <div className="p-4 md:p-6 space-y-5 w-full">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold">Tag Management</h1>
-          <p className="text-sm text-muted-foreground">
-            Create, edit, and remove unused meme tags. Auto-saves on blur.
-          </p>
-        </div>
+      <div className="flex justify-end">
         <div className="text-xs text-muted-foreground">
           {isFetching ? "Refreshing..." : "Live cache"}
         </div>
@@ -194,7 +360,7 @@ export function TagsScreen() {
           {createMutation.error.message}
         </div>
       )}
-      
+
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {(error as Error).message}
@@ -217,6 +383,12 @@ export function TagsScreen() {
         onGlobalFilterChange={setSearch}
         sorting={sorting}
         onSortingChange={setSorting}
+      />
+
+      <EditTagDialog
+        tag={editingTag}
+        open={!!editingTag}
+        onOpenChange={(open) => !open && setEditingTag(null)}
       />
     </div>
   );

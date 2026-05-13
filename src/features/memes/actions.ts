@@ -62,8 +62,8 @@ export async function createMemeAction(
     };
   }
 
-  revalidatePath("/");
-  redirect("/");
+  revalidatePath("/memes");
+  redirect("/memes");
 }
 
 export async function updateMemeAction(id: string, formData: FormData) {

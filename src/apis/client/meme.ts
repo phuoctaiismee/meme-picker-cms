@@ -103,6 +103,33 @@ export const meme = {
       query = query.eq("is_active", false);
     }
 
+    if (params.tags?.trim()) {
+      const tagSlugs = params.tags.split(",").map((s) => s.trim()).filter(Boolean);
+      if (tagSlugs.length > 0) {
+        const { data: tagRows } = await supabase
+          .from("tags")
+          .select("id")
+          .in("slug", tagSlugs);
+
+        if (tagRows && tagRows.length > 0) {
+          const tagIds = tagRows.map((t) => t.id);
+          const { data: memeTagRows } = await supabase
+            .from("meme_tags")
+            .select("meme_id")
+            .in("tag_id", tagIds);
+
+          if (memeTagRows && memeTagRows.length > 0) {
+            const memeIds = Array.from(new Set(memeTagRows.map((mt) => mt.meme_id)));
+            query = query.in("id", memeIds);
+          } else {
+            return { data: [], total: 0, page, pageSize, pageCount: 1 };
+          }
+        } else {
+          return { data: [], total: 0, page, pageSize, pageCount: 1 };
+        }
+      }
+    }
+
     query = applyPaginationAndSorting(query, params, {
       defaultSortBy: "created_at",
       defaultSortOrder: "desc",
