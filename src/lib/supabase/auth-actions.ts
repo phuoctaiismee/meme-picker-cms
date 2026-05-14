@@ -4,6 +4,14 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function signIn(formData: FormData) {
+  const result = await signInWithCredentials(formData);
+  if (result.error) {
+    redirect(`/login?error=${encodeURIComponent(result.error)}`);
+  }
+  redirect("/");
+}
+
+export async function signInWithCredentials(formData: FormData): Promise<{ error?: string }> {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
   const supabase = await createSupabaseServerClient();
@@ -11,10 +19,10 @@ export async function signIn(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
   if (error) {
-    redirect(`/login?error=${encodeURIComponent(error.message)}`);
+    return { error: error.message };
   }
 
-  redirect("/");
+  return {};
 }
 
 export async function signOut() {
