@@ -6,6 +6,7 @@ import type { Meme, MemeListData } from "@/apis/interfaces/memes";
 import type { MemeTag } from "@/apis/interfaces/tags";
 import type { PaginatedResult, PaginationParams } from "@/apis/interfaces/pagination";
 import { applyPaginationAndSorting } from "./utils";
+import { cache } from "@/lib/cache";
 
 interface MemeTagJoin {
   tags: MemeTag | MemeTag[] | null;
@@ -342,33 +343,75 @@ export const meme = {
   },
 
   async suggest(context: string, limit: number = 5): Promise<Meme[]> {
-    const supabase = await createSupabaseServerClient();
+    const normalizedContext = context.trim();
+    if (!normalizedContext) return [];
 
-    // 1. Fetch all available tags to give context to the AI
-    const { data: tags, error: tagsError } = await supabase
-      .from("tags")
-      .select("name, slug");
-
-    if (tagsError || !tags) {
-      console.error("[suggest] Failed to fetch tags:", tagsError?.message);
-      return [];
-    }
-
-    console.log("[suggest] Total tags in DB:", tags.length, tags.map(t => t.slug));
-
-    const tagList = tags.map(t => `${t.name} (${t.slug})`).join(", ");
-
-    // 2. Use Gemini to analyze context and suggest tags
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       console.warn("[suggest] GEMINI_API_KEY is not set.");
       return [];
     }
 
-    try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    const supabase = await createSupabaseServerClient();
+    const genAI = new GoogleGenerativeAI(apiKey);
 
+    // 1. Semantic Cache Check (using interactions table)
+    try {
+      console.log("[suggest] Checking semantic cache in interactions...");
+      const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-2" });
+      const embeddingResult = await embeddingModel.embedContent({
+        content: { role: "user", parts: [{ text: normalizedContext }] },
+        taskType: "RETRIEVAL_QUERY" as any,
+        outputDimensionality: 768,
+      } as any);
+      const queryVector = embeddingResult.embedding.values;
+
+      const { data: matches, error: rpcError } = await supabase.rpc("match_past_suggestions", {
+        query_embedding: queryVector,
+        match_threshold: 0.1, // Set very low for debugging
+        match_count: 1
+      });
+
+      if (rpcError) {
+        console.error("[suggest] RPC Error during cache check:", rpcError.message, rpcError.details);
+      }
+
+      console.log(`[suggest] Cache search results: ${matches?.length || 0} matches found.`);
+
+      if (!rpcError && matches && matches.length > 0) {
+        const bestMatch = matches[0];
+        console.log(`[suggest] Semantic cache hit from interactions! Similarity: ${bestMatch.similarity.toFixed(4)}`);
+        
+        const metadata = bestMatch.context_metadata as any;
+        const cachedMemeIds = metadata?.suggested_meme_ids as string[];
+
+        if (cachedMemeIds && cachedMemeIds.length > 0) {
+          const { data: memes } = await supabase
+            .from("memes")
+            .select("id, media_key, title, storage_provider, media_type, ocr_content, access_tier, is_active, created_at, meme_tags(tags(id, name, slug, category))")
+            .in("id", cachedMemeIds)
+            .eq("is_active", true);
+
+          if (memes && memes.length > 0) {
+            return (memes as any[]).map(mapMeme);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[suggest] Semantic cache error:", err);
+    }
+
+    // 2. Fetch all available tags
+    const { data: tags, error: tagsError } = await supabase
+      .from("tags")
+      .select("name, slug");
+
+    if (tagsError || !tags) return [];
+    const tagList = tags.map(t => `${t.name} (${t.slug})`).join(", ");
+
+    // 3. Use Gemini Flash for new suggestions
+    try {
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
       const prompt = `
         You are a meme suggestion assistant.
         A user is viewing a social media post with the following content:
@@ -381,54 +424,65 @@ export const meme = {
         Output ONLY the slugs of the tags separated by commas. Do not include any other text or explanation.
       `;
 
-      console.log("[suggest] Sending prompt to Gemini...");
+      console.log("[suggest] Calling Gemini Flash for new suggestions...");
       const result = await model.generateContent(prompt);
       const responseText = result.response.text().trim();
-      console.log("[suggest] Gemini raw response:", responseText);
-
+      
       const suggestedSlugs = responseText
         .split(",")
         .map(s => s.trim())
         .filter(Boolean);
 
-      console.log("[suggest] Suggested slugs:", suggestedSlugs);
-
       if (suggestedSlugs.length === 0) return [];
 
-      // 3. Query memes based on suggested tags
-      const { data: tagRows } = await supabase
-        .from("tags")
-        .select("id")
-        .in("slug", suggestedSlugs);
-
-      console.log("[suggest] Matched tagRows:", tagRows?.length, tagRows?.map(t => t.id));
-
+      // 4. Query memes based on suggested tags
+      const { data: tagRows } = await supabase.from("tags").select("id").in("slug", suggestedSlugs);
       if (!tagRows || tagRows.length === 0) return [];
 
       const tagIds = tagRows.map(t => t.id);
-      const { data: memeTagRows } = await supabase
-        .from("meme_tags")
-        .select("meme_id")
-        .in("tag_id", tagIds);
-
-      console.log("[suggest] memeTagRows count:", memeTagRows?.length);
-
+      const { data: memeTagRows } = await supabase.from("meme_tags").select("meme_id").in("tag_id", tagIds);
       if (!memeTagRows || memeTagRows.length === 0) return [];
 
       const memeIds = Array.from(new Set(memeTagRows.map(mt => mt.meme_id))).slice(0, limit);
-
-      const { data: memes, error: memesError } = await supabase
+      const { data: memes } = await supabase
         .from("memes")
         .select("id, media_key, title, storage_provider, media_type, ocr_content, access_tier, is_active, created_at, meme_tags(tags(id, name, slug, category))")
         .in("id", memeIds)
         .eq("is_active", true);
 
-      if (memesError || !memes) {
-        console.error("[suggest] Failed to fetch memes:", memesError?.message);
-        return [];
+      if (!memes) return [];
+
+      // 5. Save to interactions as Semantic Cache
+      try {
+        const finalMemeIds = memes.map(m => m.id);
+        const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-2" });
+        const embeddingResult = await embeddingModel.embedContent({
+          content: { role: "user", parts: [{ text: normalizedContext }] },
+          taskType: "RETRIEVAL_QUERY" as any,
+          outputDimensionality: 768,
+        } as any);
+        const vector = embeddingResult.embedding.values;
+
+        console.log(`[suggest] Attempting to save to DB. Vector length: ${vector.length}`);
+
+        const { error: insertError } = await supabase.from("interactions").insert({
+          action_type: "ai_suggestion",
+          context_metadata: {
+            context_text: normalizedContext,
+            suggested_meme_ids: finalMemeIds
+          },
+          embedding: vector
+        });
+
+        if (insertError) {
+          console.error("[suggest] Supabase insert error:", insertError.message, insertError.details);
+        } else {
+          console.log("[suggest] Successfully saved to interactions (semantic cache).");
+        }
+      } catch (saveErr) {
+        console.error("[suggest] Unexpected error during save:", saveErr);
       }
 
-      console.log("[suggest] Final memes count:", memes.length);
       return (memes as any[]).map(mapMeme);
     } catch (error) {
       console.error("[suggest] AI error:", error);

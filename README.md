@@ -1,14 +1,14 @@
 # Meme Library CMS
 
-![Meme Library CMS Banner](https://images.unsplash.com/photo-1599508704512-2f19efd1e35f?auto=format&fit=crop&q=80&w=1200&h=400)
+![Meme Library CMS Banner](/public/images/branding/vector-space-bg.png)
 
-A premium, production-ready Content Management System (CMS) designed for high-performance digital asset management, specializing in memes. This platform features a robust tagging system, AI-powered content analysis, and a context-aware suggestion engine for browser extensions.
+A premium, production-ready Content Management System (CMS) designed for high-performance digital asset management, specializing in memes. This platform features a robust tagging system, AI-powered content analysis, and a state-of-the-art **Semantic Suggestion Lab** for browser extensions.
 
 ## 🚀 Key Features
 
 - **Advanced Meme Management**: Upload, categorize, and manage high-quality memes with support for both images and videos.
-- **AI-Powered Suggestions**: Integrated with **Google Gemini 2.0** to analyze text context and suggest relevant memes for social media interactions.
-- **Smart Tagging System**: Comprehensive tag management with automated categorization and fast filtering.
+- **Semantic Suggestion Lab**: Integrated with **Google Gemini 2.5 Flash** and **Vector Embeddings** to analyze text context and suggest relevant memes with semantic understanding.
+- **Dual-Layer Caching**: High-speed Redis caching for exact matches and **Semantic Caching** using Supabase pgvector to minimize AI costs and latency.
 - **Cloud-Native Storage**: Seamless integration with **Cloudinary** for optimized media delivery and **Supabase** for lightning-fast database operations.
 - **Premium Admin Interface**: A state-of-the-art UI/UX built with React, featuring dark mode, glassmorphism aesthetics, and smooth animations.
 - **Audit & Analytics**: Track administrator actions and view library statistics through a centralized dashboard.

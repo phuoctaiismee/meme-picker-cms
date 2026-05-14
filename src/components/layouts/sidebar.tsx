@@ -10,7 +10,8 @@ import {
   Logout01Icon,
   TagsIcon,
   UserCircle02Icon,
-  Activity01Icon
+  Activity01Icon,
+  SparklesIcon
 } from "@hugeicons/core-free-icons";
 import {
   Sidebar,
@@ -41,6 +42,7 @@ const menuItems = [
   { icon: Image01Icon, label: "Meme Library", href: "/memes" },
   { icon: TagsIcon, label: "Tags", href: "/tags" },
   { icon: Activity01Icon, label: "Interactions", href: "/interactions" },
+  { icon: SparklesIcon, label: "AI Suggestion", href: "/ai-suggestion" },
 ];
 
 function getInitials(nameOrEmail?: string) {
@@ -76,7 +78,7 @@ export function MemesSidebar({
       <SidebarHeader className="p-4 pb-0">
         <div className="flex items-center gap-2.5">
           <div className="flex size-8 relative items-center justify-center rounded-md overflow-hidden">
-            <Image src="/meo-huh.gif" alt="Logo" fill className="object-contain" />
+            <Image src="/meo-huh.gif" alt="Logo" fill className="object-contain" quality={40} unoptimized sizes="30px" />
           </div>
           <span className="font-semibold text-base">CMS</span>
         </div>
