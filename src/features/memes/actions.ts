@@ -62,7 +62,9 @@ export async function createMemeAction(
     };
   }
 
+  revalidatePath("/");
   revalidatePath("/memes");
+  revalidatePath("/ai-suggestion");
   redirect("/memes");
 }
 

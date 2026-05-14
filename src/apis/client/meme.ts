@@ -182,6 +182,42 @@ export const meme = {
       throw new Error(memeError?.message || "Failed to save meme.");
     }
 
+    // --- NEW: Generate Embedding for the meme ---
+    try {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (apiKey) {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-2" });
+        
+        const tagsString = input.tags.map(t => t.name).join(", ");
+        const textToEmbed = `${input.title || ""} ${input.ocr_content || ""} ${tagsString}`.trim();
+        
+        if (textToEmbed) {
+          const result = await embeddingModel.embedContent({
+            content: { role: "user", parts: [{ text: textToEmbed }] },
+            taskType: "RETRIEVAL_DOCUMENT" as any,
+            outputDimensionality: 1536,
+          } as any);
+          const vector = result.embedding.values;
+          
+          const { error: updateError } = await supabase
+            .from("memes")
+            .update({ embedding: vector })
+            .eq("id", newMeme.id);
+          
+          if (updateError) {
+            console.error("[create] Update embedding error:", updateError.message, updateError.details);
+          } else {
+            console.log(`[create] Successfully updated embedding for meme: ${newMeme.id}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[create] Failed to generate embedding:", err);
+      // We don't throw here to ensure the meme is still created even if AI fails
+    }
+    // -------------------------------------------
+
     const tagRows = await Promise.all(
       input.tags.map(async (tag) => {
         const { data, error } = await supabase
@@ -343,7 +379,7 @@ export const meme = {
   },
 
   async suggest(context: string, limit: number = 5): Promise<Meme[]> {
-    const normalizedContext = context.trim();
+    const normalizedContext = context.trim().toLowerCase();
     if (!normalizedContext) return [];
 
     const apiKey = process.env.GEMINI_API_KEY;
@@ -353,6 +389,39 @@ export const meme = {
     }
 
     const supabase = await createSupabaseServerClient();
+
+    // 0. Exact Match Check (Fastest & Free)
+    try {
+      const originalContext = context.trim();
+      const { data: exactMatches } = await supabase
+        .from("interactions")
+        .select("context_metadata")
+        .eq("action_type", "ai_suggestion")
+        .in("context_metadata->>context_text", [originalContext, normalizedContext])
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (exactMatches && exactMatches.length > 0) {
+        const metadata = exactMatches[0].context_metadata as any;
+        const cachedMemeIds = metadata?.suggested_meme_ids as string[];
+
+        if (cachedMemeIds && cachedMemeIds.length > 0) {
+          console.log(`[suggest] Exact match hit for "${normalizedContext}"!`);
+          const { data: memes } = await supabase
+            .from("memes")
+            .select("id, media_key, title, storage_provider, media_type, ocr_content, access_tier, is_active, created_at, meme_tags(tags(id, name, slug, category))")
+            .in("id", cachedMemeIds)
+            .eq("is_active", true);
+
+          if (memes && memes.length > 0) {
+            return (memes as any[]).map(mapMeme);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("[suggest] Exact match check error:", err);
+    }
+
     const genAI = new GoogleGenerativeAI(apiKey);
 
     // 1. Semantic Cache Check (using interactions table)
@@ -368,7 +437,7 @@ export const meme = {
 
       const { data: matches, error: rpcError } = await supabase.rpc("match_past_suggestions", {
         query_embedding: queryVector,
-        match_threshold: 0.1, // Set very low for debugging
+        match_threshold: 0.75, // Increased from 0.1 to avoid false positives
         match_count: 1
       });
 
@@ -376,7 +445,7 @@ export const meme = {
         console.error("[suggest] RPC Error during cache check:", rpcError.message, rpcError.details);
       }
 
-      console.log(`[suggest] Cache search results: ${matches?.length || 0} matches found.`);
+      console.log(`[suggest] Cache search results: ${matches?.length || 0} matches found above threshold.`);
 
       if (!rpcError && matches && matches.length > 0) {
         const bestMatch = matches[0];
@@ -424,8 +493,28 @@ export const meme = {
         Output ONLY the slugs of the tags separated by commas. Do not include any other text or explanation.
       `;
 
-      console.log("[suggest] Calling Gemini Flash for new suggestions...");
-      const result = await model.generateContent(prompt);
+      console.log(`[suggest] Prompting ${model.model} for context: "${context}"`);
+      
+      let result;
+      let attempts = 0;
+      const maxAttempts = 3;
+      
+      while (attempts < maxAttempts) {
+        try {
+          result = await model.generateContent(prompt);
+          break; // Success!
+        } catch (err: any) {
+          attempts++;
+          if (err?.status === 503 && attempts < maxAttempts) {
+            console.warn(`[suggest] AI Service busy (503). Retrying in ${attempts * 1000}ms...`);
+            await new Promise(resolve => setTimeout(resolve, attempts * 1000));
+            continue;
+          }
+          throw err;
+        }
+      }
+
+      if (!result) return [];
       const responseText = result.response.text().trim();
       
       const suggestedSlugs = responseText
@@ -488,5 +577,19 @@ export const meme = {
       console.error("[suggest] AI error:", error);
       return [];
     }
+  },
+
+  async bulkCreate(inputs: CreateMemeInput[]): Promise<string[]> {
+    const results: string[] = [];
+    // We process sequentially to avoid hitting rate limits too hard
+    for (const input of inputs) {
+      try {
+        const id = await this.create(input);
+        results.push(id);
+      } catch (err) {
+        console.error(`[bulkCreate] Failed to create one meme:`, err);
+      }
+    }
+    return results;
   },
 };
