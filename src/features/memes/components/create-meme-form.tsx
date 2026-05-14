@@ -14,6 +14,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Loading03Icon, Upload01Icon, Tag01Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileUpload } from "@/components/ui/file-upload";
+import { BulkImportModal } from "./bulk-import-modal";
+import { FileImportIcon } from "@hugeicons/core-free-icons";
 
 const initialState: CreateMemeState = {};
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -55,6 +57,7 @@ export function CreateMemeForm() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<"image" | "video" | null>(null);
   const [selectedTags, setSelectedTags] = useState<Option[]>([]);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const handleFileChange = (file: File | null) => {
@@ -87,6 +90,19 @@ export function CreateMemeForm() {
   return (
     <form action={formAction} className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_400px]">
       <div className="flex flex-col gap-6">
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-bold tracking-tight">Create New Meme</h1>
+          <Button 
+            type="button" 
+            variant="outline" 
+            className="gap-2 bg-primary/5 border-primary/20 text-primary hover:bg-primary/10"
+            onClick={() => setIsBulkModalOpen(true)}
+          >
+            <HugeiconsIcon icon={FileImportIcon} className="size-4" />
+            Bulk Import from Excel
+          </Button>
+        </div>
+
         {state.error && (
           <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive flex items-center gap-2">
             <HugeiconsIcon icon={InformationCircleIcon} className="size-4 shrink-0" />
@@ -243,6 +259,8 @@ export function CreateMemeForm() {
           </div>
         </div>
       </aside>
+
+      <BulkImportModal open={isBulkModalOpen} onOpenChange={setIsBulkModalOpen} />
     </form>
   );
 }

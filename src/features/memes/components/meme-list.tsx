@@ -12,10 +12,11 @@ import {
   TagsIcon,
   Activity01Icon,
   ViewIcon,
-  ViewOffIcon
+  ViewOffIcon,
+  CheckmarkCircle02Icon
 } from "@hugeicons/core-free-icons";
 import { trackMemeInteractionAction } from "@/features/interactions/actions";
-import { deleteMemeAction, toggleMemeStatusAction } from "@/features/memes/actions";
+import { deleteMemeAction, toggleMemeStatusAction, deleteMemesBulkAction } from "@/features/memes/actions";
 import { EditMemeDrawer } from "@/features/memes/components/edit-meme-drawer";
 import { MemeCard } from "@/features/memes/components/meme-card";
 import { DataTable } from "@/components/datas/table";
@@ -39,6 +40,7 @@ import type { Meme, MemeTag } from "@/apis/interfaces/memes";
 import Link from "next/link";
 import Image from "next/image";
 import { useQueryState } from "nuqs";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface MemeListProps {
   memes: Meme[];
@@ -144,6 +146,47 @@ export function MemeList({
       return;
     }
     await queryClient.invalidateQueries({ queryKey: ["memes"] });
+  };
+
+  const [rowSelection, setRowSelection] = React.useState<Record<string, boolean>>({});
+  const [isBulkMode, setIsBulkMode] = React.useState(false);
+
+  const selectedIds = React.useMemo(
+    () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
+    [rowSelection]
+  );
+
+  const toggleBulkMode = () => {
+    setIsBulkMode(!isBulkMode);
+    if (isBulkMode) {
+      setRowSelection({});
+    }
+  };
+
+  const toggleSelectMeme = (id: string) => {
+    setRowSelection((prev) => ({
+      ...prev,
+      [id]: !prev[id],
+    }));
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.length === 0) return;
+    
+    modal.show({
+      title: `Delete ${selectedIds.length} Memes?`,
+      description: `Are you sure you want to delete these ${selectedIds.length} memes? This action will deactivate active memes and permanently delete inactive ones.`,
+      confirmText: "Delete Selected",
+      variant: "destructive",
+      onConfirm: async () => {
+        const result = await deleteMemesBulkAction(selectedIds);
+        if (result.error) {
+          throw new Error(result.error);
+        }
+        setRowSelection({});
+        await queryClient.invalidateQueries({ queryKey: ["memes"] });
+      },
+    });
   };
 
   const columns = React.useMemo(
@@ -256,33 +299,52 @@ export function MemeList({
     <div className="flex flex-col xl:flex-row gap-6">
       <div className="flex-1 min-w-0 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-card p-4 rounded-2xl border shadow-sm mb-6">
-          <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl border shrink-0 overflow-x-auto max-w-full">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl border shrink-0 overflow-x-auto max-w-full">
+              <Button
+                variant={status === "all" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => onStatusChange("all")}
+                className={cn("rounded-lg h-8 gap-1.5 px-3", status === "all" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              >
+                <HugeiconsIcon icon={Menu01Icon} className="size-3.5" />
+                <span className="text-xs">All</span>
+              </Button>
+              <Button
+                variant={status === "active" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => onStatusChange("active")}
+                className={cn("rounded-lg h-8 gap-1.5 px-3", status === "active" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              >
+                <HugeiconsIcon icon={ViewIcon} className="size-3.5" />
+                <span className="text-xs">Active</span>
+              </Button>
+              <Button
+                variant={status === "inactive" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => onStatusChange("inactive")}
+                className={cn("rounded-lg h-8 gap-1.5 px-3", status === "inactive" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              >
+                <HugeiconsIcon icon={ViewOffIcon} className="size-3.5" />
+                <span className="text-xs">Inactive</span>
+              </Button>
+            </div>
+
+            <div className="hidden sm:block w-px h-5 bg-border" />
+
             <Button
-              variant={status === "all" ? "default" : "ghost"}
+              variant={isBulkMode ? "default" : "outline"}
               size="sm"
-              onClick={() => onStatusChange("all")}
-              className={cn("rounded-lg h-8 gap-1.5 px-3", status === "all" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              onClick={toggleBulkMode}
+              className={cn(
+                "rounded-lg h-8 gap-1.5 px-3 border-dashed", 
+                isBulkMode 
+                  ? "bg-primary text-primary-foreground font-bold border-primary shadow-sm" 
+                  : "text-muted-foreground hover:text-foreground border-muted-foreground/20"
+              )}
             >
-              <HugeiconsIcon icon={Menu01Icon} className="size-3.5" />
-              <span className="text-xs">All</span>
-            </Button>
-            <Button
-              variant={status === "active" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => onStatusChange("active")}
-              className={cn("rounded-lg h-8 gap-1.5 px-3", status === "active" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
-            >
-              <HugeiconsIcon icon={ViewIcon} className="size-3.5" />
-              <span className="text-xs">Active</span>
-            </Button>
-            <Button
-              variant={status === "inactive" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => onStatusChange("inactive")}
-              className={cn("rounded-lg h-8 gap-1.5 px-3", status === "inactive" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
-            >
-              <HugeiconsIcon icon={ViewOffIcon} className="size-3.5" />
-              <span className="text-xs">Inactive</span>
+              <HugeiconsIcon icon={isBulkMode ? Activity01Icon : Menu01Icon} className="size-3.5" />
+              <span className="text-xs">Bulk Select</span>
             </Button>
           </div>
 
@@ -358,6 +420,9 @@ export function MemeList({
                       onEdit={handleOpenEdit}
                       onToggleStatus={handleToggleStatus}
                       onDelete={handleDeleteMeme}
+                      isSelected={selectedIds.includes(meme.id)}
+                      onSelect={isBulkMode ? () => toggleSelectMeme(meme.id) : undefined}
+                      isSelectionEnabled={isBulkMode}
                     />
                   ))}
                 </>
@@ -398,6 +463,10 @@ export function MemeList({
               sorting={sorting}
               onSortingChange={onSortingChange}
               isLoading={isLoading}
+              enableSelection={isBulkMode}
+              rowSelection={rowSelection}
+              onRowSelectionChange={setRowSelection}
+              getRowId={(meme) => meme.id}
             />
           </div>
         )}
@@ -439,7 +508,7 @@ export function MemeList({
                     className={cn(
                       "inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium border transition-all cursor-pointer",
                       isSelected
-                        ? "bg-primary border-primary text-primary-foreground shadow-sm shadow-primary/20"
+                        ? "bg-primary border-primary text-primary-foreground shadow-sm"
                         : "bg-muted/30 border-transparent hover:bg-muted/60 text-muted-foreground hover:text-foreground"
                     )}
                   >
@@ -483,6 +552,36 @@ export function MemeList({
         open={!!editingMeme}
         onOpenChange={(open) => !open && handleCloseEdit()}
       />
+
+      {/* Bulk Action Toolbar */}
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="bg-card/80 text-foreground px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-6 border border-border/50 backdrop-blur-xl">
+            <div className="flex items-center gap-3 border-r pr-6">
+              <span className="text-sm font-bold text-primary">{selectedIds.length}</span>
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">Selected</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button     
+                variant="ghost" 
+                size="sm" 
+                className="text-xs font-semibold rounded-xl h-9 hover:bg-muted/50"
+                onClick={() => setRowSelection({})} 
+              >
+                Deselect All
+              </Button>
+              <Button 
+                variant="destructive" 
+                size="sm" 
+                className="bg-red-500 hover:bg-red-600 text-white text-xs font-semibold rounded-xl h-9 px-6 shadow-lg shadow-red-500/20"
+                onClick={handleBulkDelete}
+              >
+                Delete
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

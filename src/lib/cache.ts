@@ -3,6 +3,8 @@ import { Redis } from "@upstash/redis";
 export interface CacheProvider {
   get<T>(key: string): Promise<T | null>;
   set<T>(key: string, value: T, ttlSeconds?: number): Promise<void>;
+  del(key: string): Promise<void>;
+  invalidate(prefix: string): Promise<void>;
 }
 
 // 1. Upstash Redis Implementation
@@ -24,6 +26,20 @@ const upstashRedis = () => {
     async set<T>(key: string, value: T, ttlSeconds = 86400) {
       await redis.set(key, value, { ex: ttlSeconds });
     },
+    async del(key: string) {
+      await redis.del(key);
+    },
+    async invalidate(prefix: string) {
+      // For Upstash Redis, we can use SCAN to find keys with prefix
+      let cursor = "0";
+      do {
+        const [nextCursor, keys] = await redis.scan(cursor, { match: `${prefix}*`, count: 100 });
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+        cursor = nextCursor;
+      } while (cursor !== "0");
+    }
   } as CacheProvider;
 };
 
@@ -45,6 +61,16 @@ const memoryCache: CacheProvider = {
       expiry: Date.now() + ttlSeconds * 1000,
     });
   },
+  async del(key) {
+    memoryStore.delete(key);
+  },
+  async invalidate(prefix) {
+    for (const key of memoryStore.keys()) {
+      if (key.startsWith(prefix)) {
+        memoryStore.delete(key);
+      }
+    }
+  }
 };
 
 // Auto-select provider based on ENV

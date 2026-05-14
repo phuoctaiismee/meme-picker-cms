@@ -13,7 +13,7 @@ import {
   type PaginationState,
   type OnChangeFn,
 } from "@tanstack/react-table";
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   Table,
   TableBody,
@@ -34,6 +34,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, any>[];
@@ -61,6 +62,14 @@ interface DataTableProps<TData> {
   
   /** Custom global filter function for client-side filtering. */
   globalFilterFn?: FilterFn<TData>;
+
+  onRowClick?: (data: TData) => void;
+
+  // Selection
+  enableSelection?: boolean;
+  rowSelection?: Record<string, boolean>;
+  onRowSelectionChange?: OnChangeFn<Record<string, boolean>>;
+  getRowId?: (data: TData) => string;
 }
 
 export function DataTable<TData>({
@@ -80,6 +89,11 @@ export function DataTable<TData>({
   manualFiltering = false,
   manualSorting = false,
   globalFilterFn,
+  onRowClick,
+  enableSelection = false,
+  rowSelection,
+  onRowSelectionChange,
+  getRowId,
 }: DataTableProps<TData>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [internalPagination, setInternalPagination] = useState<PaginationState>({
@@ -91,10 +105,44 @@ export function DataTable<TData>({
   const pagination = externalPagination ?? internalPagination;
   const globalFilter = externalGlobalFilter ?? internalGlobalFilter;
   const sorting = externalSorting ?? internalSorting;
+  const [internalRowSelection, setInternalRowSelection] = useState<Record<string, boolean>>({});
+
+  const finalRowSelection = rowSelection ?? internalRowSelection;
+  const finalOnRowSelectionChange = onRowSelectionChange ?? setInternalRowSelection;
+
+  const tableColumns = React.useMemo(() => {
+    if (!enableSelection) return columns;
+    
+    const selectionColumn: ColumnDef<TData> = {
+      id: "select",
+      header: ({ table }) => (
+        <div className="flex items-center justify-center w-10">
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+            aria-label="Select all"
+          />
+        </div>
+      ),
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center w-10">
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+        </div>
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    };
+
+    return [selectionColumn, ...columns];
+  }, [columns, enableSelection]);
 
   const table = useReactTable({
     data,
-    columns,
+    columns: tableColumns,
     pageCount: serverPageCount,
     manualPagination,
     manualFiltering,
@@ -104,10 +152,14 @@ export function DataTable<TData>({
     onSortingChange: onSortingChange ?? setInternalSorting,
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: manualFiltering ? undefined : getFilteredRowModel(),
+    onRowSelectionChange: finalOnRowSelectionChange,
+    getRowId,
+    enableRowSelection: enableSelection,
     state: {
       sorting,
       pagination,
       globalFilter,
+      rowSelection: finalRowSelection,
     },
     onPaginationChange: (updater) => {
       const next = typeof updater === "function" ? updater(pagination) : updater;
@@ -152,12 +204,13 @@ export function DataTable<TData>({
                   const sorted = header.column.getIsSorted();
 
                   return (
-                    <TableHead key={header.id}>
+                    <TableHead key={header.id} className={cn(header.id === "select" && "p-0 w-10")}>
                       {header.isPlaceholder ? null : (
                         <div
                           className={cn(
                             "flex items-center gap-2",
-                            canSort && "cursor-pointer select-none hover:text-foreground transition-colors"
+                            canSort && "cursor-pointer select-none hover:text-foreground transition-colors",
+                            header.id === "select" && "justify-center"
                           )}
                           onClick={header.column.getToggleSortingHandler()}
                         >
@@ -200,10 +253,17 @@ export function DataTable<TData>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="relative group"
+                  className={cn("relative group", (onRowClick || enableSelection) && "cursor-pointer")}
+                  onClick={() => {
+                    if (enableSelection) {
+                      row.toggleSelected();
+                    } else if (onRowClick) {
+                      onRowClick(row.original);
+                    }
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
+                    <TableCell key={cell.id} className={cn(cell.column.id === "select" && "p-0 w-10")}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()

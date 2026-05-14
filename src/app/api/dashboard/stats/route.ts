@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { cache } from "@/lib/cache";
 
 export async function GET() {
+  const cacheKey = "dashboard:stats";
+  
   try {
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      console.log("[Dashboard API] Cache hit");
+      return NextResponse.json(cached);
+    }
+
     const supabase = await createSupabaseServerClient();
 
     const [
@@ -81,7 +90,7 @@ export async function GET() {
       }
     });
 
-    return NextResponse.json({
+    const result = {
       totalMemes: totalMemes ?? 0,
       activeMemes: activeMemes ?? 0,
       totalTags: totalTags ?? 0,
@@ -95,7 +104,10 @@ export async function GET() {
         usage_count: t.meme_tags?.[0]?.count ?? 0
       })),
       interactionHistory: Array.from(historyMap.entries()).map(([date, count]) => ({ date, count }))
-    });
+    };
+
+    await cache.set(cacheKey, result, 120);
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Dashboard stats error:", error);
     return NextResponse.json({ error: "Failed to fetch dashboard stats" }, { status: 500 });

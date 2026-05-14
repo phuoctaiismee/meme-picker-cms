@@ -7,6 +7,7 @@ import {
   ViewIcon,
   ViewOffIcon,
   Alert01Icon,
+  CheckmarkCircle02Icon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,12 +21,16 @@ import {
 import { cn } from "@/lib/utils";
 import { useMemesStore } from "@/store/memes-store";
 import type { Meme } from "@/apis/interfaces/memes";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface MemeCardProps {
   meme: Meme;
   onEdit: (meme: Meme) => void;
   onToggleStatus: (meme: Meme, isActive: boolean) => void;
   onDelete: (meme: Meme) => void;
+  isSelected?: boolean;
+  onSelect?: () => void;
+  isSelectionEnabled?: boolean;
 }
 
 const tagColors = [
@@ -59,16 +64,33 @@ export function MemeCard({
   onEdit,
   onToggleStatus,
   onDelete,
+  isSelected,
+  onSelect,
+  isSelectionEnabled,
 }: MemeCardProps) {
   const { toggleSelectedTagSlug } = useMemesStore();
 
   return (
     <article
       className={cn(
-        "group relative flex flex-col rounded-2xl border p-1.5 bg-card overflow-hidden transition-all duration-200 hover:bg-muted/50 shadow-xs",
-        !meme.is_active && "opacity-80 grayscale-[0.3]"
+        "group relative flex flex-col rounded-2xl border p-1.5 bg-card overflow-hidden transition-all duration-200 hover:bg-muted/50 shadow-xs cursor-pointer",
+        !meme.is_active && "opacity-80 grayscale-[0.3]",
+        isSelected && "ring-1 ring-primary border-primary bg-primary/5"
       )}
+      onClick={() => onSelect?.()}
     >
+      {/* Selection Checkbox */}
+      {isSelectionEnabled && (
+        <div className={cn(
+          "absolute top-3 left-3 z-30 transition-all duration-200",
+          isSelected ? "opacity-100 scale-100" : "opacity-0 scale-90 group-hover:opacity-100 group-hover:scale-100"
+        )}>
+          <Checkbox 
+            checked={isSelected} 
+            onCheckedChange={onSelect}
+          />
+        </div>
+      )}
       {/* Media Area */}
       <div className="aspect-4/3 bg-muted relative overflow-hidden rounded-xl">
         {meme.media_type === "video" ? (
@@ -112,6 +134,7 @@ export function MemeCard({
                   variant="secondary"
                   size="icon-xs"
                   className="size-7 rounded-lg"
+                  onClick={(e) => e.stopPropagation()}
                 >
                   <HugeiconsIcon icon={MoreVerticalIcon} className="size-3.5" />
                 </Button>
@@ -120,40 +143,34 @@ export function MemeCard({
             <DropdownMenuContent align="end" className="w-40 p-1 rounded-lg shadow-xl border-muted-foreground/10">
               <DropdownMenuGroup className="space-y-0.5">
                 <DropdownMenuItem
-                  className="rounded-md gap-1.5 cursor-pointer text-xs py-1 px-2"
+                  className="gap-1.5 cursor-pointer text-xs"
                   onClick={() => window.open(meme.media_url, "_blank")}
                 >
                   <HugeiconsIcon icon={Image01Icon} className="size-3.5" /> Preview Media
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="rounded-md gap-1.5 cursor-pointer text-xs py-1 px-2"
+                  className="gap-1.5 cursor-pointer text-xs"
                   onClick={() => onEdit(meme)}
                 >
                   <HugeiconsIcon icon={Activity01Icon} className="size-3.5" /> Edit Details
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="rounded-md gap-1.5 cursor-pointer text-xs py-1 px-2"
-                  onClick={() => onToggleStatus(meme, !meme.is_active)}
-                >
-                  {meme.is_active ? (
-                    <>
-                      <HugeiconsIcon icon={ViewOffIcon} className="size-3.5 text-orange-500" />
-                      Deactivate
-                    </>
-                  ) : (
-                    <>
-                      <HugeiconsIcon icon={ViewIcon} className="size-3.5 text-emerald-500" />
-                      Restore
-                    </>
-                  )}
-                </DropdownMenuItem>
+                {!meme.is_active && (
+                  <DropdownMenuItem
+                    className="gap-1.5 cursor-pointer text-xs"
+                    onClick={() => onToggleStatus(meme, true)}
+                  >
+                    <HugeiconsIcon icon={ViewIcon} className="size-3.5 text-emerald-500" />
+                    Restore
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator className="my-0.5 opacity-50" />
                 <DropdownMenuItem
-                  className="rounded-md gap-1.5 text-red-500 focus:text-red-500 focus:bg-red-50 dark:focus:bg-red-950/20 cursor-pointer text-xs py-1 px-2"
+                  variant="destructive"
+                  className="gap-1.5 cursor-pointer text-xs"
                   onClick={() => onDelete(meme)}
                 >
-                  <HugeiconsIcon icon={Alert01Icon} className="size-3.5" /> Delete{" "}
-                  {meme.is_active ? "Soft" : "Hard"}
+                  <HugeiconsIcon icon={Alert01Icon} className="size-3.5" /> 
+                  {meme.is_active ? "Delete" : "Delete Permanently"}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
             </DropdownMenuContent>

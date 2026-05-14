@@ -89,9 +89,17 @@ export const meme = {
   },
 
   async list(params: PaginationParams): Promise<PaginatedResult<Meme>> {
-    const supabase = await createSupabaseServerClient();
-    const { page, pageSize, search } = params;
+    const { page, pageSize, search, status, tags: tagsParam, sortBy, sortOrder } = params;
+    const cacheKey = `memes:list:${JSON.stringify({ page, pageSize, search, status, tagsParam, sortBy, sortOrder })}`;
+    
+    // Try to get from cache first
+    const cached = await cache.get<PaginatedResult<Meme>>(cacheKey);
+    if (cached) {
+      console.log(`[Meme API] Cache hit for key: ${cacheKey}`);
+      return cached;
+    }
 
+    const supabase = await createSupabaseServerClient();
     let query = supabase
       .from("memes")
       .select(
@@ -99,14 +107,14 @@ export const meme = {
         { count: "exact" }
       );
 
-    if (params.status === "active" || !params.status) {
+    if (status === "active" || !status) {
       query = query.eq("is_active", true);
-    } else if (params.status === "inactive") {
+    } else if (status === "inactive") {
       query = query.eq("is_active", false);
     }
 
-    if (params.tags?.trim()) {
-      const tagSlugs = params.tags.split(",").map((s) => s.trim()).filter(Boolean);
+    if (tagsParam?.trim()) {
+      const tagSlugs = tagsParam.split(",").map((s) => s.trim()).filter(Boolean);
       if (tagSlugs.length > 0) {
         const { data: tagRows } = await supabase
           .from("tags")
@@ -124,10 +132,14 @@ export const meme = {
             const memeIds = Array.from(new Set(memeTagRows.map((mt) => mt.meme_id)));
             query = query.in("id", memeIds);
           } else {
-            return { data: [], total: 0, page, pageSize, pageCount: 1 };
+            const result = { data: [], total: 0, page, pageSize, pageCount: 1 };
+            await cache.set(cacheKey, result, 300); // Cache empty results too
+            return result;
           }
         } else {
-          return { data: [], total: 0, page, pageSize, pageCount: 1 };
+          const result = { data: [], total: 0, page, pageSize, pageCount: 1 };
+          await cache.set(cacheKey, result, 300);
+          return result;
         }
       }
     }
@@ -146,13 +158,17 @@ export const meme = {
     if (error) throw new Error(error.message);
 
     const total = count ?? 0;
-    return {
+    const result = {
       data: ((data ?? []) as MemeRow[]).map(mapMeme),
       total,
       page,
       pageSize,
       pageCount: Math.max(1, Math.ceil(total / pageSize)),
     };
+
+    // Store in cache for 5 minutes
+    await cache.set(cacheKey, result, 300);
+    return result;
   },
 
   async create(input: CreateMemeInput): Promise<string> {
@@ -240,6 +256,9 @@ export const meme = {
 
     if (joinError) throw new Error(joinError.message);
 
+    // Invalidate cache
+    await cache.invalidate("memes:list");
+
     await logAdminAction({
       action: "meme.create",
       entityType: "meme",
@@ -301,6 +320,9 @@ export const meme = {
 
       if (joinError) throw new Error(joinError.message);
     }
+
+    // Invalidate cache
+    await cache.invalidate("memes:list");
 
     await logAdminAction({
       action: "meme.update",
@@ -376,6 +398,75 @@ export const meme = {
         },
       });
     }
+
+    // Invalidate cache
+    await cache.invalidate("memes:list");
+  },
+
+  async deleteBulk(ids: string[]): Promise<void> {
+    const supabase = await createSupabaseServerClient();
+
+    const { data: memes, error: fetchError } = await supabase
+      .from("memes")
+      .select("id, media_key, storage_provider, media_type, is_active, title")
+      .in("id", ids);
+
+    if (fetchError || !memes) {
+      throw new Error(fetchError?.message || "Failed to fetch memes for deletion.");
+    }
+
+    const activeIds = memes.filter(m => m.is_active).map(m => m.id);
+    const inactiveMemes = memes.filter(m => !m.is_active);
+
+    if (activeIds.length > 0) {
+      const { error: deactivateError } = await supabase
+        .from("memes")
+        .update({ is_active: false })
+        .in("id", activeIds);
+      
+      if (deactivateError) throw new Error(deactivateError.message);
+      
+      for (const m of memes.filter(m => m.is_active)) {
+        await logAdminAction({
+          action: "meme.deactivate",
+          entityType: "meme",
+          entityId: m.id,
+          metadata: { media_key: m.media_key, title: m.title },
+        });
+      }
+    }
+
+    if (inactiveMemes.length > 0) {
+      const inactiveIds = inactiveMemes.map(m => m.id);
+      
+      for (const m of inactiveMemes) {
+        const storage = getStorageProvider(m.storage_provider);
+        try {
+          await storage.delete(m.media_key, m.media_type);
+        } catch (storageError) {
+          console.error(`Failed to delete file from storage for ${m.id}:`, storageError);
+        }
+      }
+
+      const { error: dbError } = await supabase
+        .from("memes")
+        .delete()
+        .in("id", inactiveIds);
+
+      if (dbError) throw new Error(dbError.message);
+
+      for (const m of inactiveMemes) {
+        await logAdminAction({
+          action: "meme.delete_permanent",
+          entityType: "meme",
+          entityId: m.id,
+          metadata: { media_key: m.media_key, title: m.title },
+        });
+      }
+    }
+
+    // Invalidate cache
+    await cache.invalidate("memes:list");
   },
 
   async suggest(context: string, limit: number = 5): Promise<Meme[]> {

@@ -4,6 +4,7 @@ import { slugifyTag } from "@/lib/slug";
 import type { MemeTag, TagManagementData, ManagedTag } from "@/apis/interfaces/tags";
 import type { PaginatedResult, PaginationParams } from "@/apis/interfaces/pagination";
 import { applyPaginationAndSorting } from "./utils";
+import { cache } from "@/lib/cache";
 
 export interface CreateTagInput {
   name: string;
@@ -18,6 +19,13 @@ export interface UpdateTagInput {
 
 export const tag = {
   async getAll(): Promise<TagManagementData> {
+    const cacheKey = "tags:all";
+    const cached = await cache.get<TagManagementData>(cacheKey);
+    if (cached) {
+      console.log(`[Tag API] Cache hit for: ${cacheKey}`);
+      return cached;
+    }
+
     const supabase = await createSupabaseServerClient();
 
     const [{ data: tagRows, error: tagsError }, { data: joinRows, error: joinsError }] =
@@ -35,17 +43,28 @@ export const tag = {
       usageCounts.set(join.tag_id, (usageCounts.get(join.tag_id) ?? 0) + 1);
     }
 
-    return {
+    const result = {
       tags: ((tagRows ?? []) as MemeTag[]).map((t) => ({
         ...t,
         usage_count: usageCounts.get(t.id) ?? 0,
       })),
     };
+
+    await cache.set(cacheKey, result, 600); // Cache for 10 minutes
+    return result;
   },
 
   async list(params: PaginationParams): Promise<PaginatedResult<ManagedTag>> {
+    const { page, pageSize, search, sortBy, sortOrder } = params;
+    const cacheKey = `tags:list:${JSON.stringify({ page, pageSize, search, sortBy, sortOrder })}`;
+    
+    const cached = await cache.get<PaginatedResult<ManagedTag>>(cacheKey);
+    if (cached) {
+      console.log(`[Tag API] Cache hit for: ${cacheKey}`);
+      return cached;
+    }
+
     const supabase = await createSupabaseServerClient();
-    const { page, pageSize, search } = params;
 
     let query = supabase
       .from("tags")
@@ -82,7 +101,7 @@ export const tag = {
     }
 
     const total = count ?? 0;
-    return {
+    const result = {
       data: ((tagRows ?? []) as MemeTag[]).map((t) => ({
         ...t,
         usage_count: usageCounts.get(t.id) ?? 0,
@@ -92,6 +111,9 @@ export const tag = {
       pageSize,
       pageCount: Math.max(1, Math.ceil(total / pageSize)),
     };
+
+    await cache.set(cacheKey, result, 600);
+    return result;
   },
 
   async create(input: CreateTagInput): Promise<number> {
@@ -110,6 +132,9 @@ export const tag = {
       .single();
 
     if (error || !data) throw new Error(error?.message || "Failed to create tag.");
+
+    // Invalidate tag cache
+    await cache.invalidate("tags:");
 
     await logAdminAction({
       action: "tag.create",
@@ -145,6 +170,9 @@ export const tag = {
 
     if (error || !data) throw new Error(error?.message || "Failed to update tag.");
 
+    // Invalidate tag cache
+    await cache.invalidate("tags:");
+
     await logAdminAction({
       action: "tag.update",
       entityType: "tag",
@@ -176,6 +204,9 @@ export const tag = {
       .single();
 
     if (error || !data) throw new Error(error?.message || "Failed to delete tag.");
+
+    // Invalidate tag cache
+    await cache.invalidate("tags:");
 
     await logAdminAction({
       action: "tag.delete",

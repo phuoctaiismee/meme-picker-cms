@@ -6,6 +6,7 @@ import { DataTable } from "@/components/datas/table";
 import type { InteractionLog, AdminAuditLog } from "@/apis/interfaces/interactions";
 import type { PaginatedResult } from "@/apis/interfaces/pagination";
 import { useTableState, getTableSearchParams } from "@/components/datas/table/use-table-state";
+import { JsonViewer } from "@/components/datas/json-viewer";
 
 async function getPaginatedLogs<T>(type: "interactions" | "audit", apiParams: any): Promise<PaginatedResult<T>> {
   const params = getTableSearchParams(apiParams);
@@ -30,12 +31,6 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-function formatMetadata(value: Record<string, unknown> | null) {
-  if (!value || Object.keys(value).length === 0) {
-    return "-";
-  }
-  return JSON.stringify(value);
-}
 
 const interactionHelper = createColumnHelper<InteractionLog>();
 const interactionColumns = [
@@ -66,11 +61,7 @@ const interactionColumns = [
   interactionHelper.accessor("context_metadata", {
     header: "Metadata",
     enableSorting: false,
-    cell: (info) => (
-      <span className="max-w-72 truncate text-xs text-muted-foreground block">
-        {formatMetadata(info.getValue())}
-      </span>
-    ),
+    cell: (info) => <JsonViewer data={info.getValue()} label="View Details" />,
   }),
   interactionHelper.accessor("created_at", {
     header: "Created",
@@ -112,11 +103,7 @@ const auditColumns = [
   auditHelper.accessor("metadata", {
     header: "Metadata",
     enableSorting: false,
-    cell: (info) => (
-      <span className="max-w-72 truncate text-xs text-muted-foreground block">
-        {formatMetadata(info.getValue())}
-      </span>
-    ),
+    cell: (info) => <JsonViewer data={info.getValue()} label="View Diff" />,
   }),
   auditHelper.accessor("created_at", {
     header: "Created",

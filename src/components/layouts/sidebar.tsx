@@ -108,15 +108,6 @@ export function MemesSidebar({
           </SidebarGroupContent>
         </SidebarGroup>
 
-        <SidebarGroup className="p-0 mt-6">
-          <div className="flex items-center gap-1 px-2 pb-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-            <HugeiconsIcon icon={TagsIcon} className="size-3" />
-            <span>Tags power filtering</span>
-          </div>
-          <p className="px-2 text-xs text-muted-foreground">
-            Tags are saved in Supabase and attached through meme_tags.
-          </p>
-        </SidebarGroup>
       </SidebarContent>
 
       <SidebarFooter className="p-4">

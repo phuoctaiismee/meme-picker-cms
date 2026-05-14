@@ -17,6 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
   title: "Meme Picker CMS | AI-Powered Content Hub",
   description: "State-of-the-art CMS for digital asset management with Semantic Suggestion Engine and Gemini AI integration.",
   openGraph: {

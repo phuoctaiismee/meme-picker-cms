@@ -109,14 +109,47 @@ export async function deleteMemeAction(id: string) {
 }
 
 export async function toggleMemeStatusAction(id: string, isActive: boolean) {
-  try {
-    await appClient.meme.update(id, {
-      is_active: isActive,
-    });
-    revalidatePath("/");
-    return { success: true };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update meme status.";
-    return { error: getAdminDatabaseErrorMessage(message) };
+    try {
+      await appClient.meme.update(id, {
+        is_active: isActive,
+      });
+      revalidatePath("/");
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to update meme status.";
+      return { error: getAdminDatabaseErrorMessage(message) };
+    }
   }
-}
+
+  export async function revalidatePathAction(path: string) {
+    revalidatePath(path);
+  }
+
+  export async function createMemeBulkItemAction(input: {
+    file: File;
+    title?: string;
+    tags: { name: string; slug: string }[];
+    ocr_content?: string;
+  }) {
+    try {
+      return await appClient.meme.create({
+        ...input,
+        access_tier: "free",
+        is_active: true,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to create meme item.";
+      throw new Error(getAdminDatabaseErrorMessage(message));
+    }
+  }
+  export async function deleteMemesBulkAction(ids: string[]) {
+    try {
+      await appClient.meme.deleteBulk(ids);
+      revalidatePath("/");
+      revalidatePath("/memes");
+      return { success: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to bulk delete memes.";
+      return { error: getAdminDatabaseErrorMessage(message) };
+    }
+  }
