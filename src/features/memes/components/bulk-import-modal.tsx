@@ -18,7 +18,9 @@ import {
   InformationCircleIcon,
   Edit01Icon,
   PlusSignIcon,
-  AlertCircleIcon
+  AlertCircleIcon,
+  SparklesIcon,
+  Tag01Icon
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +51,7 @@ interface ImportRecord {
   error?: string;
   matchedFile?: File;
   progress?: number;
+  embeddingGenerated?: boolean;
 }
 
 export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -68,6 +71,10 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Memes");
     XLSX.writeFile(wb, "meme_import_template.xlsx");
+  };
+
+  const updateRecord = (id: string, updates: Partial<ImportRecord>) => {
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, ...updates } : r));
   };
 
   const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,7 +179,7 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
           }));
         }, 50);
 
-        await createMemeBulkItemAction({
+        const result = await createMemeBulkItemAction({
           file,
           title: record.title,
           tags: parseTags(record.tags),
@@ -180,7 +187,12 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
         });
 
         clearInterval(interval);
-        updatedRecords[i] = { ...record, status: "success", progress: 100 };
+        updatedRecords[i] = { 
+          ...record, 
+          status: "success", 
+          progress: 100,
+          embeddingGenerated: result.embeddingGenerated 
+        };
         successCount++;
       } catch (err: any) {
         updatedRecords[i] = { ...record, status: "error", error: err.message, progress: 0 };
@@ -217,7 +229,7 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
         if (!val) resetState();
       }
     }}>
-      <DialogContent className="sm:max-w-[900px] flex flex-col p-0 overflow-hidden [&>button]:hidden border rounded-lg shadow-lg">
+      <DialogContent className="sm:max-w-[1000px] flex flex-col p-0 overflow-hidden [&>button]:hidden border rounded-lg shadow-lg">
         <DialogHeader className="p-5 px-6 border-b bg-background">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -366,23 +378,27 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
           {step === 3 && (
             <div className="h-full flex flex-col space-y-4">
               <div className="flex items-center justify-between px-1">
-                <h3 className="text-base font-semibold">Final Review</h3>
+                <div className="flex flex-col">
+                  <h3 className="text-base font-semibold">Final Review</h3>
+                  <p className="text-[10px] text-muted-foreground">Click on title or tags to edit before import.</p>
+                </div>
                 <span className="text-xs font-medium text-primary bg-primary/5 px-2 py-0.5 rounded-full">{records.filter(r => r.matchedFile).length} / {records.length} Matched</span>
               </div>
               
               <div className="flex-1 min-h-0 border rounded-md overflow-hidden bg-card">
                 <div className="h-full overflow-y-auto">
                   <table className="w-full text-sm text-left border-collapse">
-                    <thead className="bg-muted/50 sticky top-0 z-10 border-b">
+                    <thead className="bg-muted/50 sticky top-0 z-10 border-b text-[10px] uppercase tracking-wider">
                       <tr>
-                        <th className="p-3 font-semibold text-xs uppercase text-muted-foreground w-16 text-center">Media</th>
-                        <th className="p-3 font-semibold text-xs uppercase text-muted-foreground">Meme Information</th>
-                        <th className="p-3 font-semibold text-xs uppercase text-muted-foreground w-20 text-right pr-6">Action</th>
+                        <th className="p-3 font-semibold w-16 text-center">Media</th>
+                        <th className="p-3 font-semibold min-w-[200px]">Meme Details (Title / Tags)</th>
+                        <th className="p-3 font-semibold w-32 text-center">AI Vector</th>
+                        <th className="p-3 font-semibold w-20 text-right pr-6">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
                       {records.map((r) => (
-                        <tr key={r.id} className="hover:bg-muted/20 transition-colors">
+                        <tr key={r.id} className="hover:bg-muted/10 transition-colors group">
                           <td className="p-3">
                             <div className="size-11 rounded border bg-muted/30 flex items-center justify-center overflow-hidden">
                               {r.matchedFile ? (
@@ -393,11 +409,41 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
                             </div>
                           </td>
                           <td className="p-3">
-                            <div className="flex flex-col gap-1">
-                              <span className="font-medium text-sm truncate">{r.title || r.filename}</span>
-                              <span className="text-xs text-muted-foreground font-mono truncate max-w-[350px] opacity-70">{r.filename}</span>
-                              {r.status === "uploading" && <Progress value={r.progress || 0} className="h-1 mt-2" />}
+                            <div className="flex flex-col gap-1.5">
+                              <input 
+                                className="w-full bg-transparent border-none focus:ring-0 focus:outline-none font-medium text-sm p-0 placeholder:text-muted-foreground/30 focus:text-primary transition-colors"
+                                value={r.title}
+                                onChange={(e) => updateRecord(r.id, { title: e.target.value })}
+                                placeholder="Enter title..."
+                                disabled={isProcessing}
+                              />
+                              <div className="flex items-center gap-2">
+                                <HugeiconsIcon icon={Tag01Icon} className="size-3 text-muted-foreground opacity-50" />
+                                <input 
+                                  className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-[11px] p-0 text-muted-foreground placeholder:text-muted-foreground/30 focus:text-primary transition-colors"
+                                  value={r.tags}
+                                  onChange={(e) => updateRecord(r.id, { tags: e.target.value })}
+                                  placeholder="tag1, tag2..."
+                                  disabled={isProcessing}
+                                />
+                              </div>
+                              {r.status === "uploading" && <Progress value={r.progress || 0} className="h-0.5 mt-1" />}
                             </div>
+                          </td>
+                          <td className="p-3 text-center">
+                            {r.status === "success" ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <HugeiconsIcon 
+                                  icon={SparklesIcon} 
+                                  className={cn("size-4", r.embeddingGenerated ? "text-primary" : "text-muted-foreground/30")} 
+                                />
+                                <span className={cn("text-[9px] font-medium uppercase tracking-tighter", r.embeddingGenerated ? "text-primary" : "text-muted-foreground/30")}>
+                                  {r.embeddingGenerated ? "Generated" : "N/A"}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground/20">Pending</span>
+                            )}
                           </td>
                           <td className="p-3 text-right pr-6">
                             <div className="flex items-center justify-end gap-2">
