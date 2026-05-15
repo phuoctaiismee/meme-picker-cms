@@ -171,7 +171,7 @@ export const meme = {
     return result;
   },
 
-  async create(input: CreateMemeInput): Promise<string> {
+  async create(input: CreateMemeInput): Promise<{ id: string; embeddingGenerated: boolean }> {
     const supabase = await createSupabaseServerClient();
     const storageProvider = getStorageProvider("cloudinary");
 
@@ -199,6 +199,7 @@ export const meme = {
     }
 
     // --- NEW: Generate Embedding for the meme ---
+    let embeddingGenerated = false;
     try {
       const apiKey = process.env.GEMINI_API_KEY;
       if (apiKey) {
@@ -212,7 +213,7 @@ export const meme = {
           const result = await embeddingModel.embedContent({
             content: { role: "user", parts: [{ text: textToEmbed }] },
             taskType: "RETRIEVAL_DOCUMENT" as any,
-            outputDimensionality: 1536,
+            outputDimensionality: 768,
           } as any);
           const vector = result.embedding.values;
           
@@ -225,6 +226,7 @@ export const meme = {
             console.error("[create] Update embedding error:", updateError.message, updateError.details);
           } else {
             console.log(`[create] Successfully updated embedding for meme: ${newMeme.id}`);
+            embeddingGenerated = true;
           }
         }
       }
@@ -271,7 +273,7 @@ export const meme = {
       },
     });
 
-    return newMeme.id;
+    return { id: newMeme.id, embeddingGenerated };
   },
 
   async update(id: string, input: Partial<Omit<CreateMemeInput, "file">>): Promise<void> {
@@ -670,13 +672,13 @@ export const meme = {
     }
   },
 
-  async bulkCreate(inputs: CreateMemeInput[]): Promise<string[]> {
-    const results: string[] = [];
+  async bulkCreate(inputs: CreateMemeInput[]): Promise<{ id: string; embeddingGenerated: boolean }[]> {
+    const results: { id: string; embeddingGenerated: boolean }[] = [];
     // We process sequentially to avoid hitting rate limits too hard
     for (const input of inputs) {
       try {
-        const id = await this.create(input);
-        results.push(id);
+        const result = await this.create(input);
+        results.push(result);
       } catch (err) {
         console.error(`[bulkCreate] Failed to create one meme:`, err);
       }

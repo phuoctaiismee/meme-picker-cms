@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -23,6 +25,7 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -68,6 +71,11 @@ export function MemesSidebar({
   avatarUrl?: string;
 }) {
   const pathname = usePathname();
+  const { setOpenMobile, isMobile } = useSidebar();
+
+  const closeMobile = React.useCallback(() => {
+    if (isMobile) setOpenMobile(false);
+  }, [isMobile, setOpenMobile]);
 
   const displayEmail = userEmail || "";
   const displayName = userName || (displayEmail ? displayEmail.split('@')[0] : "Admin");
@@ -85,7 +93,7 @@ export function MemesSidebar({
       </SidebarHeader>
 
       <SidebarContent className="px-4 pt-6">
-        <Button render={<Link href="/create" />} className="w-full mb-4">
+        <Button render={<Link href="/create" />} onClick={closeMobile} className="w-full mb-4">
           <HugeiconsIcon icon={Add01Icon} className="size-4" />
           Create Meme
         </Button>
@@ -97,6 +105,7 @@ export function MemesSidebar({
                   <SidebarMenuButton
                     render={<Link href={item.href} />}
                     isActive={pathname === item.href}
+                    onClick={closeMobile}
                     className="h-9"
                   >
                     <HugeiconsIcon icon={item.icon} className="size-4" />
@@ -138,7 +147,7 @@ export function MemesSidebar({
           />
           <DropdownMenuContent align="end" className="w-[200px]">
             <DropdownMenuGroup>
-              <DropdownMenuItem render={<Link href="/profile" />}>
+              <DropdownMenuItem render={<Link href="/profile" />} onClick={closeMobile}>
                 <HugeiconsIcon
                   icon={UserCircle02Icon}
                   className="size-4 mr-2"

@@ -42,9 +42,7 @@ export function SuggestionInput({ onSuggest, isLoading }: SuggestionInputProps) 
         </div>
 
         <div className="flex items-center justify-between pt-2 border-t border-muted/30">
-          <p className="text-[10px] text-muted-foreground italic">
-            * Gemini 2.5 Flash will analyze this content to suggest the best memes.
-          </p>
+          <div />
           <Button 
             type="submit" 
             disabled={isLoading || !value.trim()}
