@@ -177,18 +177,18 @@ export function DataTable<TData>({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex flex-1 items-center space-x-2">
           <Input
             placeholder={searchPlaceholder}
             value={filterValue}
             onChange={(event) => table.setGlobalFilter(event.target.value)}
-            className="max-w-sm"
+            className="max-w-full sm:max-w-sm"
           />
           {isLoading && <HugeiconsIcon icon={Loading03Icon} className="h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
         {total !== undefined && (
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-muted-foreground whitespace-nowrap">
             Total {total.toLocaleString()} items
           </div>
         )}
@@ -204,13 +204,14 @@ export function DataTable<TData>({
                   const sorted = header.column.getIsSorted();
 
                   return (
-                    <TableHead key={header.id} className={cn(header.id === "select" && "p-0 w-10")}>
+                    <TableHead key={header.id} className={cn(header.id === "select" && "p-0 w-10", header.id === "actions" && "text-right")}>
                       {header.isPlaceholder ? null : (
                         <div
                           className={cn(
                             "flex items-center gap-2",
                             canSort && "cursor-pointer select-none hover:text-foreground transition-colors",
-                            header.id === "select" && "justify-center"
+                            header.id === "select" && "justify-center",
+                            header.id === "actions" && "justify-end"
                           )}
                           onClick={header.column.getToggleSortingHandler()}
                         >
@@ -263,7 +264,7 @@ export function DataTable<TData>({
                   }}
                 >
                   {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id} className={cn(cell.column.id === "select" && "p-0 w-10")}>
+                    <TableCell key={cell.id} className={cn(cell.column.id === "select" && "p-0 w-10", cell.column.id === "actions" && "text-right")}>
                       {flexRender(
                         cell.column.columnDef.cell,
                         cell.getContext()
@@ -292,9 +293,9 @@ export function DataTable<TData>({
         )}
       </div>
 
-      <div className="flex items-center justify-between px-2">
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-2">
         <div className="flex items-center space-x-2">
-          <p className="text-sm font-medium text-muted-foreground">Rows per page</p>
+          <p className="hidden sm:block text-sm font-medium text-muted-foreground">Rows per page</p>
           <Select
             value={pagination.pageSize.toString()}
             onValueChange={(value) => table.setPageSize(Number(value))}

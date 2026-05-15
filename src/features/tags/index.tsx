@@ -326,11 +326,6 @@ export function TagsScreen() {
 
   return (
     <div className="p-4 md:p-6 space-y-5 w-full">
-      <div className="flex justify-end">
-        <div className="text-xs text-muted-foreground">
-          {isFetching ? "Refreshing..." : "Live cache"}
-        </div>
-      </div>
 
       <form
         className="grid gap-3 rounded-xl border bg-card p-4 md:grid-cols-[1fr_220px_auto]"
