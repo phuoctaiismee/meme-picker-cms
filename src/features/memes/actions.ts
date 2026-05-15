@@ -81,7 +81,15 @@ export async function updateMemeAction(id: string, formData: FormData) {
     const access_tier = String(formData.get("access_tier") ?? "free");
     const is_active = formData.get("is_active") === "on";
 
+    const media_key = String(formData.get("media_key") ?? "").trim() || undefined;
+    const media_url = String(formData.get("media_url") ?? "").trim() || undefined;
+    const fileInput = formData.get("file");
+    const file = fileInput instanceof File && fileInput.size > 0 ? fileInput : undefined;
+
     await appClient.meme.update(id, {
+      file,
+      media_key,
+      media_url,
       title,
       tags,
       ocr_content,

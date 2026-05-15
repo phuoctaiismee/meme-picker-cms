@@ -16,6 +16,7 @@ export interface StorageProvider {
   upload: (input: StorageUploadInput) => Promise<StorageUploadResult>;
   getPublicUrl: (key: string, mediaType?: string | null) => string;
   delete: (key: string, mediaType?: string | null) => Promise<void>;
+  list: (params?: { folder?: string; maxResults?: number }) => Promise<{ resources: StorageUploadResult[] }>;
 }
 
 function getCloudinaryConfig() {
@@ -93,6 +94,32 @@ export const cloudinaryStorageProvider: StorageProvider = {
     await cloudinary.uploader.destroy(key, {
       resource_type: resourceType,
     });
+  },
+  async list(params) {
+    const { cloudName, apiKey, apiSecret } = getCloudinaryConfig();
+
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret,
+      secure: true,
+    });
+
+    const result = await cloudinary.api.resources({
+      type: "upload",
+      resource_type: "image",
+      prefix: params?.folder,
+      max_results: params?.maxResults || 50,
+      direction: "desc",
+    });
+
+    return {
+      resources: result.resources.map((res: any) => ({
+        key: res.public_id,
+        mediaType: "image",
+        secureUrl: res.secure_url,
+      })),
+    };
   },
 };
 
