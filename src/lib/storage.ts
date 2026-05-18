@@ -65,7 +65,7 @@ export const cloudinaryStorageProvider: StorageProvider = {
     })) as UploadApiResponse;
 
     return {
-      key: result.public_id,
+      key: result.format ? `${result.public_id}.${result.format}` : result.public_id,
       mediaType,
       secureUrl: result.secure_url,
     };
@@ -91,7 +91,8 @@ export const cloudinaryStorageProvider: StorageProvider = {
     });
 
     const resourceType = mediaType === "video" ? "video" : "image";
-    await cloudinary.uploader.destroy(key, {
+    const publicId = key.includes(".") ? key.split(".").slice(0, -1).join(".") : key;
+    await cloudinary.uploader.destroy(publicId, {
       resource_type: resourceType,
     });
   },

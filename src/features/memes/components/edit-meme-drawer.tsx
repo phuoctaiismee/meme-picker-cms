@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import MultipleSelector, { type Option } from "@/components/ui/multiple-selector";
+import MultipleSelector from "@/components/ui/multiple-selector";
 import { updateMemeAction } from "@/features/memes/actions";
 import type { Meme } from "@/apis/interfaces/memes";
 import type { MemeTag } from "@/apis/interfaces/tags";
@@ -81,7 +81,7 @@ type EditMemeValues = z.infer<typeof editMemeSchema>;
 
 function EditMemeForm({ meme, onOpenChange }: { meme: Meme; onOpenChange: (open: boolean) => void }) {
   const queryClient = useQueryClient();
-  
+
   const [showMediaPicker, setShowMediaPicker] = React.useState(false);
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null);
@@ -113,7 +113,7 @@ function EditMemeForm({ meme, onOpenChange }: { meme: Meme; onOpenChange: (open:
       formData.set("access_tier", data.access_tier);
       formData.set("is_active", data.is_active ? "on" : "off");
       formData.set("tags", data.tags.map((tag) => tag.label).join(","));
-      
+
       if (selectedFile) {
         formData.set("file", selectedFile);
       } else if (data.media_key !== meme.media_key) {
@@ -189,10 +189,10 @@ function EditMemeForm({ meme, onOpenChange }: { meme: Meme; onOpenChange: (open:
                   <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold text-center">
                     {selectedFile ? `New File: ${selectedFile.name}` : `Media Key: ${field.value}`}
                   </p>
-                  
-                  <MediaPicker 
-                    open={showMediaPicker} 
-                    onOpenChange={setShowMediaPicker} 
+
+                  <MediaPicker
+                    open={showMediaPicker}
+                    onOpenChange={setShowMediaPicker}
                     onSelect={(asset) => {
                       if (asset.file) {
                         setSelectedFile(asset.file);
@@ -203,7 +203,7 @@ function EditMemeForm({ meme, onOpenChange }: { meme: Meme; onOpenChange: (open:
                         setPreviewUrl(null);
                         field.onChange(asset.key);
                       }
-                    }} 
+                    }}
                   />
                 </>
               )}
@@ -329,9 +329,9 @@ function EditMemeForm({ meme, onOpenChange }: { meme: Meme; onOpenChange: (open:
         >
           Cancel
         </Button>
-        <Button 
-          type="submit" 
-          form="edit-meme-form" 
+        <Button
+          type="submit"
+          form="edit-meme-form"
           className="flex-1 rounded-xl h-11 font-bold shadow-lg shadow-primary/20"
           disabled={isPending || !isReallyDirty}
         >

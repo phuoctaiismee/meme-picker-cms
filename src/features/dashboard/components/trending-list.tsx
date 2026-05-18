@@ -67,6 +67,7 @@ export function TrendingList({ memes, tags, isLoading }: TrendingListProps) {
                     fill 
                     className="object-cover"
                     sizes="48px"
+                    unoptimized={meme.media_url.toLowerCase().includes(".gif") || meme.media_key.toLowerCase().includes(".gif")}
                   />
                 </div>
                 <div className="flex-1 min-w-0">

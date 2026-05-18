@@ -136,7 +136,23 @@ export function FileUpload({
           <div className="text-center">
             <p className="text-sm font-medium">Click to upload or drag & drop</p>
             <p className="text-xs text-muted-foreground mt-1">
-              {accept?.replace(/\*/g, "") || "Any file"} up to {Math.round(maxSize / 1024 / 1024)}MB
+              Supports {(() => {
+                if (!accept) return "Any file";
+                const parts = accept.split(",");
+                const formatted: string[] = [];
+                let hasImages = false;
+                let hasVideos = false;
+                parts.forEach(p => {
+                  const trimmed = p.trim().toLowerCase();
+                  if (trimmed === "image/*") hasImages = true;
+                  else if (trimmed === "video/*") hasVideos = true;
+                  else formatted.push(trimmed.replace(/^\./, "").toUpperCase());
+                });
+                if (hasImages && hasVideos) return "PNG, JPG, GIF, MP4, WebM";
+                if (hasImages) return "PNG, JPG, GIF";
+                if (hasVideos) return "MP4, WebM";
+                return formatted.join(", ");
+              })()} up to {Math.round(maxSize / 1024 / 1024)}MB
             </p>
           </div>
         )}
