@@ -203,6 +203,7 @@ export function MemeList({
                 fill
                 className="object-cover"
                 sizes="48px"
+                unoptimized={info.row.original.media_url.toLowerCase().includes(".gif") || info.row.original.media_key.toLowerCase().includes(".gif")}
               />
             </div>
             <div className="min-w-0">

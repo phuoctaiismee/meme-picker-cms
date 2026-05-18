@@ -119,6 +119,7 @@ function EditMemeForm({ meme, onOpenChange }: { meme: Meme; onOpenChange: (open:
               alt={meme.title || meme.media_key}
               fill
               className="object-contain"
+              unoptimized={meme.media_url.toLowerCase().includes(".gif") || meme.media_key.toLowerCase().includes(".gif")}
             />
           </div>
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold text-center">
