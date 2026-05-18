@@ -64,6 +64,20 @@ export interface CreateMemeInput {
   is_active?: boolean;
 }
 
+async function ensureMediaCleanup(supabase: any, mediaKey: string, mediaType: string | null, storageProvider: string | null, currentMemeId: string) {
+  // Check if any other meme is using this media_key
+  const { count, error } = await supabase
+    .from("memes")
+    .select("id", { count: "exact", head: true })
+    .eq("media_key", mediaKey)
+    .neq("id", currentMemeId);
+
+  if (!error && (count === 0 || count === null)) {
+    const storage = getStorageProvider(storageProvider);
+    await storage.delete(mediaKey, mediaType).catch(console.error);
+  }
+}
+
 export const meme = {
   async getAll(): Promise<MemeListData> {
     const supabase = await createSupabaseServerClient();
@@ -276,10 +290,37 @@ export const meme = {
     return { id: newMeme.id, embeddingGenerated };
   },
 
-  async update(id: string, input: Partial<Omit<CreateMemeInput, "file">>): Promise<void> {
+  async update(id: string, input: Partial<CreateMemeInput> & { media_key?: string; media_url?: string }): Promise<void> {
     const supabase = await createSupabaseServerClient();
+    const storage = getStorageProvider();
+
+    // 1. Fetch current meme to check for old media
+    const { data: currentMeme, error: fetchError } = await supabase
+      .from("memes")
+      .select("media_key, media_type, storage_provider")
+      .eq("id", id)
+      .single();
+
+    if (fetchError || !currentMeme) {
+      throw new Error(fetchError?.message || "Meme not found.");
+    }
 
     const updateData: any = {};
+    
+    if (input.file) {
+      // Option A: Upload new file
+      const upload = await storage.upload({ file: input.file });
+      updateData.media_key = upload.key;
+      updateData.media_type = upload.mediaType;
+
+      // Cleanup old file ONLY IF no other meme uses it
+      ensureMediaCleanup(supabase, currentMeme.media_key, currentMeme.media_type, currentMeme.storage_provider, id).catch(console.error);
+    } else if (input.media_key) {
+      // Option B: Choose existing media from gallery
+      updateData.media_key = input.media_key;
+      updateData.media_type = "image"; // We are only supporting images for gallery for now
+    }
+
     if (input.title !== undefined) updateData.title = input.title || null;
     if (input.ocr_content !== undefined) updateData.ocr_content = input.ocr_content || null;
     if (input.access_tier !== undefined) updateData.access_tier = input.access_tier || "free";
@@ -373,13 +414,11 @@ export const meme = {
     } else {
       // Hard delete: Remove from DB and Storage
       
-      // 1. Delete file from storage
-      const storage = getStorageProvider(meme.storage_provider);
+      // 1. Delete file from storage ONLY IF no other meme uses it
       try {
-        await storage.delete(meme.media_key, meme.media_type);
+        await ensureMediaCleanup(supabase, meme.media_key, meme.media_type, meme.storage_provider, id);
       } catch (storageError) {
         console.error("Failed to delete file from storage:", storageError);
-        // We continue even if storage delete fails to clean up the database
       }
 
       // 2. Delete from database (Cascade will handle meme_tags and interactions)

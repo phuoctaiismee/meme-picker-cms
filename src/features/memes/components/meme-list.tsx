@@ -299,40 +299,40 @@ export function MemeList({
   return (
     <div className="flex flex-col xl:flex-row gap-6">
       <div className="flex-1 min-w-0 space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-card p-4 rounded-2xl border shadow-sm mb-6">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl border shrink-0 overflow-x-auto max-w-full">
-              <Button
-                variant={status === "all" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => onStatusChange("all")}
-                className={cn("rounded-lg h-8 gap-1.5 px-3", status === "all" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
-              >
-                <HugeiconsIcon icon={Menu01Icon} className="size-3.5" />
-                <span className="text-xs">All</span>
-              </Button>
-              <Button
-                variant={status === "active" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => onStatusChange("active")}
-                className={cn("rounded-lg h-8 gap-1.5 px-3", status === "active" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
-              >
-                <HugeiconsIcon icon={ViewIcon} className="size-3.5" />
-                <span className="text-xs">Active</span>
-              </Button>
-              <Button
-                variant={status === "inactive" ? "default" : "ghost"}
-                size="sm"
-                onClick={() => onStatusChange("inactive")}
-                className={cn("rounded-lg h-8 gap-1.5 px-3", status === "inactive" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
-              >
-                <HugeiconsIcon icon={ViewOffIcon} className="size-3.5" />
-                <span className="text-xs">Inactive</span>
-              </Button>
-            </div>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card p-4 rounded-2xl border shadow-sm mb-6">
+          {/* Status Filters */}
+          <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl border shrink-0 overflow-x-auto max-w-full">
+            <Button
+              variant={status === "all" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => onStatusChange("all")}
+              className={cn("rounded-lg h-8 gap-1.5 px-3", status === "all" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              <HugeiconsIcon icon={Menu01Icon} className="size-3.5" />
+              <span className="text-xs font-semibold">All</span>
+            </Button>
+            <Button
+              variant={status === "active" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => onStatusChange("active")}
+              className={cn("rounded-lg h-8 gap-1.5 px-3", status === "active" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              <HugeiconsIcon icon={ViewIcon} className="size-3.5" />
+              <span className="text-xs font-semibold">Active</span>
+            </Button>
+            <Button
+              variant={status === "inactive" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => onStatusChange("inactive")}
+              className={cn("rounded-lg h-8 gap-1.5 px-3", status === "inactive" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
+            >
+              <HugeiconsIcon icon={ViewOffIcon} className="size-3.5" />
+              <span className="text-xs font-semibold">Inactive</span>
+            </Button>
+          </div>
 
-            <div className="hidden sm:block w-px h-5 bg-border" />
-
+          {/* Tools: Bulk Select & View Mode */}
+          <div className="flex items-center gap-3 self-end md:self-auto">
             <Button
               variant={isBulkMode ? "default" : "outline"}
               size="sm"
@@ -345,29 +345,31 @@ export function MemeList({
               )}
             >
               <HugeiconsIcon icon={isBulkMode ? Activity01Icon : Menu01Icon} className="size-3.5" />
-              <span className="text-xs">Bulk Select</span>
+              <span className="text-xs font-semibold">Bulk Select</span>
             </Button>
-          </div>
 
-          <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl border shrink-0 self-end sm:self-auto">
-            <Button
-              variant={viewMode === "grid" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("grid")}
-              className={cn("rounded-lg h-8 gap-1.5 px-3", viewMode === "grid" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
-            >
-              <HugeiconsIcon icon={Image01Icon} className="size-3.5" />
-              <span className="text-xs">Grid</span>
-            </Button>
-            <Button
-              variant={viewMode === "list" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("list")}
-              className={cn("rounded-lg h-8 gap-1.5 px-3", viewMode === "list" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
-            >
-              <HugeiconsIcon icon={Menu01Icon} className="size-3.5" />
-              <span className="text-xs">List</span>
-            </Button>
+            <div className="hidden sm:block w-px h-4 bg-border mx-1" />
+
+            <div className="flex items-center gap-1 bg-muted/30 p-1 rounded-xl border shrink-0">
+              <Button
+                variant={viewMode === "grid" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("grid")}
+                className={cn("rounded-lg h-8 gap-1.5 px-3", viewMode === "grid" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              >
+                <HugeiconsIcon icon={Image01Icon} className="size-3.5" />
+                <span className="text-xs font-semibold text-nowrap">Grid</span>
+              </Button>
+              <Button
+                variant={viewMode === "list" ? "default" : "ghost"}
+                size="sm"
+                onClick={() => setViewMode("list")}
+                className={cn("rounded-lg h-8 gap-1.5 px-3", viewMode === "list" ? "bg-primary text-primary-foreground font-bold shadow-sm" : "text-muted-foreground hover:text-foreground")}
+              >
+                <HugeiconsIcon icon={Menu01Icon} className="size-3.5" />
+                <span className="text-xs font-semibold text-nowrap">List</span>
+              </Button>
+            </div>
           </div>
         </div>
 

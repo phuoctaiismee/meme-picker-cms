@@ -393,7 +393,7 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
                         <th className="p-3 font-semibold w-16 text-center">Media</th>
                         <th className="p-3 font-semibold min-w-[200px]">Meme Details (Title / Tags)</th>
                         <th className="p-3 font-semibold w-32 text-center">AI Vector</th>
-                        <th className="p-3 font-semibold w-20 text-right pr-6">Action</th>
+                        <th className="p-3 font-semibold w-20 text-right">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/50">
@@ -445,7 +445,7 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
                               <span className="text-[10px] text-muted-foreground/20">Pending</span>
                             )}
                           </td>
-                          <td className="p-3 text-right pr-6">
+                          <td className="p-3 text-right">
                             <div className="flex items-center justify-end gap-2">
                               {r.status === "pending" && (
                                 <TooltipProvider>
