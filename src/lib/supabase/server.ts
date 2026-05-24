@@ -22,7 +22,16 @@ export function hasSupabaseEnv() {
 }
 
 export async function createSupabaseServerClient() {
-  const cookieStore = await cookies();
+  let cookieStore;
+  try {
+    cookieStore = await cookies();
+  } catch (error) {
+    // Fallback for running outside of Next.js request scope (e.g., CLI scripts, cron jobs)
+    const { createClient } = await import("@supabase/supabase-js");
+    const { supabaseUrl, supabaseKey } = getSupabaseEnv();
+    return createClient(supabaseUrl, supabaseKey);
+  }
+
   const { supabaseUrl, supabaseKey } = getSupabaseEnv();
 
   return createServerClient(supabaseUrl, supabaseKey, {

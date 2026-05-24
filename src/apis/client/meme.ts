@@ -8,6 +8,20 @@ import type { PaginatedResult, PaginationParams } from "@/apis/interfaces/pagina
 import { applyPaginationAndSorting } from "./utils";
 import { cache } from "@/lib/cache";
 
+async function getGTEEmbedding(text: string): Promise<number[]> {
+  const serverUrl = process.env.GTE_API_URL || "http://localhost:7860";
+  const res = await fetch(`${serverUrl}/api/embed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texts: [text] }),
+  });
+  if (!res.ok) {
+    throw new Error(`GTE model server returned status ${res.status}: ${await res.text()}`);
+  }
+  const data = await res.json() as { embeddings: number[][] };
+  return data.embeddings[0];
+}
+
 interface MemeTagJoin {
   tags: MemeTag | MemeTag[] | null;
 }
@@ -212,41 +226,29 @@ export const meme = {
       throw new Error(memeError?.message || "Failed to save meme.");
     }
 
-    // --- NEW: Generate Embedding for the meme ---
+    // --- NEW: Generate Embedding for the meme using GTE ---
     let embeddingGenerated = false;
     try {
-      const apiKey = process.env.GEMINI_API_KEY;
-      if (apiKey) {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-2" });
+      const tagsString = input.tags.map(t => t.name).join(", ");
+      const textToEmbed = `${input.title || ""} ${input.ocr_content || ""} ${tagsString}`.trim();
+      
+      if (textToEmbed) {
+        const vector = await getGTEEmbedding(textToEmbed);
         
-        const tagsString = input.tags.map(t => t.name).join(", ");
-        const textToEmbed = `${input.title || ""} ${input.ocr_content || ""} ${tagsString}`.trim();
+        const { error: updateError } = await supabase
+          .from("memes")
+          .update({ embedding: vector })
+          .eq("id", newMeme.id);
         
-        if (textToEmbed) {
-          const result = await embeddingModel.embedContent({
-            content: { role: "user", parts: [{ text: textToEmbed }] },
-            taskType: "RETRIEVAL_DOCUMENT" as any,
-            outputDimensionality: 768,
-          } as any);
-          const vector = result.embedding.values;
-          
-          const { error: updateError } = await supabase
-            .from("memes")
-            .update({ embedding: vector })
-            .eq("id", newMeme.id);
-          
-          if (updateError) {
-            console.error("[create] Update embedding error:", updateError.message, updateError.details);
-          } else {
-            console.log(`[create] Successfully updated embedding for meme: ${newMeme.id}`);
-            embeddingGenerated = true;
-          }
+        if (updateError) {
+          console.error("[create] Update GTE embedding error:", updateError.message);
+        } else {
+          console.log(`[create] Successfully updated GTE embedding for meme: ${newMeme.id}`);
+          embeddingGenerated = true;
         }
       }
     } catch (err) {
-      console.error("[create] Failed to generate embedding:", err);
-      // We don't throw here to ensure the meme is still created even if AI fails
+      console.error("[create] Failed to generate GTE embedding:", err);
     }
     // -------------------------------------------
 
@@ -297,7 +299,7 @@ export const meme = {
     // 1. Fetch current meme to check for old media
     const { data: currentMeme, error: fetchError } = await supabase
       .from("memes")
-      .select("media_key, media_type, storage_provider")
+      .select("media_key, media_type, storage_provider, title, ocr_content")
       .eq("id", id)
       .single();
 
@@ -362,6 +364,39 @@ export const meme = {
       );
 
       if (joinError) throw new Error(joinError.message);
+    }
+
+    // Re-generate GTE embedding on update if any relevant content changed
+    if (input.title !== undefined || input.ocr_content !== undefined || input.tags !== undefined) {
+      try {
+        const finalTitle = input.title !== undefined ? input.title : (currentMeme.title || "");
+        const finalOcr = input.ocr_content !== undefined ? input.ocr_content : (currentMeme.ocr_content || "");
+        
+        let tagsString = "";
+        if (input.tags) {
+          tagsString = input.tags.map(t => t.name).join(", ");
+        } else {
+          const { data: currentTags } = await supabase
+            .from("meme_tags")
+            .select("tags(name)")
+            .eq("meme_id", id);
+          if (currentTags) {
+            tagsString = currentTags.map((t: any) => t.tags?.name).filter(Boolean).join(", ");
+          }
+        }
+        
+        const textToEmbed = `${finalTitle || ""} ${finalOcr || ""} ${tagsString}`.trim();
+        if (textToEmbed) {
+          const vector = await getGTEEmbedding(textToEmbed);
+          await supabase
+            .from("memes")
+            .update({ embedding: vector })
+            .eq("id", id);
+          console.log(`[update] Successfully re-generated GTE embedding for meme: ${id}`);
+        }
+      } catch (err) {
+        console.error("[update] Failed to re-generate GTE embedding:", err);
+      }
     }
 
     // Invalidate cache
@@ -555,54 +590,115 @@ export const meme = {
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
+    let queryVector: number[] = [];
 
-    // 1. Semantic Cache Check (using interactions table)
+    // 1. Generate GTE query embedding
     try {
-      console.log("[suggest] Checking semantic cache in interactions...");
-      const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-2" });
-      const embeddingResult = await embeddingModel.embedContent({
-        content: { role: "user", parts: [{ text: normalizedContext }] },
-        taskType: "RETRIEVAL_QUERY" as any,
-        outputDimensionality: 768,
-      } as any);
-      const queryVector = embeddingResult.embedding.values;
-
-      const { data: matches, error: rpcError } = await supabase.rpc("match_past_suggestions", {
-        query_embedding: queryVector,
-        match_threshold: 0.75, // Increased from 0.1 to avoid false positives
-        match_count: 1
-      });
-
-      if (rpcError) {
-        console.error("[suggest] RPC Error during cache check:", rpcError.message, rpcError.details);
-      }
-
-      console.log(`[suggest] Cache search results: ${matches?.length || 0} matches found above threshold.`);
-
-      if (!rpcError && matches && matches.length > 0) {
-        const bestMatch = matches[0];
-        console.log(`[suggest] Semantic cache hit from interactions! Similarity: ${bestMatch.similarity.toFixed(4)}`);
-        
-        const metadata = bestMatch.context_metadata as any;
-        const cachedMemeIds = metadata?.suggested_meme_ids as string[];
-
-        if (cachedMemeIds && cachedMemeIds.length > 0) {
-          const { data: memes } = await supabase
-            .from("memes")
-            .select("id, media_key, title, storage_provider, media_type, ocr_content, access_tier, is_active, created_at, meme_tags(tags(id, name, slug, category))")
-            .in("id", cachedMemeIds)
-            .eq("is_active", true);
-
-          if (memes && memes.length > 0) {
-            return (memes as any[]).map(mapMeme);
-          }
-        }
-      }
+      console.log("[suggest] Embedding query with GTE model server...");
+      queryVector = await getGTEEmbedding(normalizedContext);
     } catch (err) {
-      console.error("[suggest] Semantic cache error:", err);
+      console.error("[suggest] Failed to generate GTE query embedding:", err);
     }
 
-    // 2. Fetch all available tags
+    // 2. Semantic Cache Check (using interactions table and queryVector)
+    if (queryVector.length > 0) {
+      try {
+        console.log("[suggest] Checking semantic cache in interactions...");
+        const { data: matches, error: rpcError } = await supabase.rpc("match_past_suggestions", {
+          query_embedding: queryVector,
+          match_threshold: 0.75, // Increased from 0.1 to avoid false positives
+          match_count: 1
+        });
+
+        if (rpcError) {
+          console.error("[suggest] RPC Error during cache check:", rpcError.message, rpcError.details);
+        }
+
+        console.log(`[suggest] Cache search results: ${matches?.length || 0} matches found above threshold.`);
+
+        if (!rpcError && matches && matches.length > 0) {
+          const bestMatch = matches[0];
+          console.log(`[suggest] Semantic cache hit from interactions! Similarity: ${bestMatch.similarity.toFixed(4)}`);
+          
+          const metadata = bestMatch.context_metadata as any;
+          const cachedMemeIds = metadata?.suggested_meme_ids as string[];
+
+          if (cachedMemeIds && cachedMemeIds.length > 0) {
+            const { data: memes } = await supabase
+              .from("memes")
+              .select("id, media_key, title, storage_provider, media_type, ocr_content, access_tier, is_active, created_at, meme_tags(tags(id, name, slug, category))")
+              .in("id", cachedMemeIds)
+              .eq("is_active", true);
+
+            if (memes && memes.length > 0) {
+              return (memes as any[]).map(mapMeme);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[suggest] Semantic cache error:", err);
+      }
+    }
+
+    // 3. Direct Vector Search on Memes
+    if (queryVector.length > 0) {
+      try {
+        console.log("[suggest] Running direct vector search on memes...");
+        const { data: directMatches, error: directSearchError } = await supabase.rpc("match_memes", {
+          query_embedding: queryVector,
+          match_threshold: 0.72, // Cosine similarity threshold
+          match_count: limit
+        });
+
+        if (directSearchError) {
+          console.error("[suggest] Direct match_memes RPC failed:", directSearchError.message);
+        } else if (directMatches && directMatches.length > 0) {
+          console.log(`[suggest] Direct vector search hit! Found ${directMatches.length} matching memes.`);
+          
+          const matchingIds = directMatches.map((m: any) => m.id);
+          const { data: memesWithTags } = await supabase
+            .from("memes")
+            .select("id, media_key, title, storage_provider, media_type, ocr_content, access_tier, is_active, created_at, meme_tags(tags(id, name, slug, category))")
+            .in("id", matchingIds)
+            .eq("is_active", true);
+
+          if (memesWithTags && memesWithTags.length > 0) {
+            const mapped = (memesWithTags as any[]).map(mapMeme);
+            
+            // Sort mapped list to preserve the similarity rank from RPC
+            mapped.sort((a, b) => {
+              const indexA = matchingIds.indexOf(a.id);
+              const indexB = matchingIds.indexOf(b.id);
+              return indexA - indexB;
+            });
+
+            // Save suggestion to cache asynchronously
+            try {
+              await supabase.from("interactions").insert({
+                action_type: "ai_suggestion",
+                context_metadata: {
+                  context_text: normalizedContext,
+                  suggested_meme_ids: matchingIds
+                },
+                embedding: queryVector
+              });
+              console.log("[suggest] Saved GTE direct search result to cache.");
+            } catch (saveErr) {
+              console.error("[suggest] Failed to cache GTE direct match:", saveErr);
+            }
+
+            return mapped;
+          }
+        }
+      } catch (err) {
+        console.error("[suggest] Direct vector search error:", err);
+      }
+    }
+
+    // 4. Fallback: Tag Inference via Gemini 2.5 Flash
+    console.log("[suggest] Direct search missed or threshold too low. Falling back to Tag Inference...");
+    
+    // Fetch all available tags
     const { data: tags, error: tagsError } = await supabase
       .from("tags")
       .select("name, slug");
@@ -610,7 +706,6 @@ export const meme = {
     if (tagsError || !tags) return [];
     const tagList = tags.map(t => `${t.name} (${t.slug})`).join(", ");
 
-    // 3. Use Gemini Flash for new suggestions
     try {
       const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
       const prompt = `
@@ -656,7 +751,7 @@ export const meme = {
 
       if (suggestedSlugs.length === 0) return [];
 
-      // 4. Query memes based on suggested tags
+      // Query memes based on suggested tags
       const { data: tagRows } = await supabase.from("tags").select("id").in("slug", suggestedSlugs);
       if (!tagRows || tagRows.length === 0) return [];
 
@@ -673,40 +768,34 @@ export const meme = {
 
       if (!memes) return [];
 
-      // 5. Save to interactions as Semantic Cache
-      try {
-        const finalMemeIds = memes.map(m => m.id);
-        const embeddingModel = genAI.getGenerativeModel({ model: "gemini-embedding-2" });
-        const embeddingResult = await embeddingModel.embedContent({
-          content: { role: "user", parts: [{ text: normalizedContext }] },
-          taskType: "RETRIEVAL_QUERY" as any,
-          outputDimensionality: 768,
-        } as any);
-        const vector = embeddingResult.embedding.values;
+      // Save suggestion to Semantic Cache
+      if (queryVector.length > 0) {
+        try {
+          const finalMemeIds = memes.map(m => m.id);
+          console.log(`[suggest] Saving GTE fallback result to DB cache. Vector length: ${queryVector.length}`);
 
-        console.log(`[suggest] Attempting to save to DB. Vector length: ${vector.length}`);
+          const { error: insertError } = await supabase.from("interactions").insert({
+            action_type: "ai_suggestion",
+            context_metadata: {
+              context_text: normalizedContext,
+              suggested_meme_ids: finalMemeIds
+            },
+            embedding: queryVector
+          });
 
-        const { error: insertError } = await supabase.from("interactions").insert({
-          action_type: "ai_suggestion",
-          context_metadata: {
-            context_text: normalizedContext,
-            suggested_meme_ids: finalMemeIds
-          },
-          embedding: vector
-        });
-
-        if (insertError) {
-          console.error("[suggest] Supabase insert error:", insertError.message, insertError.details);
-        } else {
-          console.log("[suggest] Successfully saved to interactions (semantic cache).");
+          if (insertError) {
+            console.error("[suggest] Supabase insert error:", insertError.message, insertError.details);
+          } else {
+            console.log("[suggest] Successfully saved to interactions (semantic cache).");
+          }
+        } catch (saveErr) {
+          console.error("[suggest] Unexpected error during save:", saveErr);
         }
-      } catch (saveErr) {
-        console.error("[suggest] Unexpected error during save:", saveErr);
       }
 
       return (memes as any[]).map(mapMeme);
     } catch (error) {
-      console.error("[suggest] AI error:", error);
+      console.error("[suggest] Fallback AI error:", error);
       return [];
     }
   },
