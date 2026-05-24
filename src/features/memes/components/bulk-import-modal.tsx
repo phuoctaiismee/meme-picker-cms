@@ -40,6 +40,15 @@ import {
 import { parseTags } from "@/lib/slug";
 import { revalidatePathAction, createMemeBulkItemAction } from "@/features/memes/actions";
 import { cn } from "@/lib/utils";
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from "@/components/ui/table";
+
 
 interface ImportRecord {
   id: string;
@@ -229,7 +238,7 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
         if (!val) resetState();
       }
     }}>
-      <DialogContent className="sm:max-w-[1000px] flex flex-col p-0 overflow-hidden [&>button]:hidden border rounded-lg shadow-lg">
+      <DialogContent className={cn("sm:max-w-[1000px] flex flex-col p-0 overflow-hidden", isProcessing && "[&>button]:pointer-events-none [&>button]:opacity-30")}>
         <DialogHeader className="p-5 px-6 border-b bg-background">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -257,7 +266,7 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
               </div>
             </div>
             
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-6 mr-8">
               <div className="flex items-center gap-1.5">
                 {[1, 2, 3].map((s) => (
                   <div 
@@ -272,14 +281,6 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
                   </div>
                 ))}
               </div>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="size-8 rounded-md"
-                onClick={() => !isProcessing && onOpenChange(false)}
-              >
-                <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
-              </Button>
             </div>
           </div>
         </DialogHeader>
@@ -323,55 +324,116 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
           )}
 
           {step === 2 && (
-            <div className="max-w-xl mx-auto space-y-6">
-              <div className="text-center space-y-1">
-                <h3 className="text-lg font-semibold">Select Media Files</h3>
-                <p className="text-xs text-muted-foreground">Upload all images and videos mentioned in your Excel file.</p>
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+              {/* Left Column - Select Media Files */}
+              <div className="lg:col-span-7 space-y-6">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold">Select Media Files</h3>
+                  <p className="text-xs text-muted-foreground">Upload all images and videos mentioned in your Excel file.</p>
+                </div>
+
+                <div className="relative">
+                  <input type="file" multiple accept="image/*,video/*" onChange={handleImagesUpload} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
+                  <div className="border border-dashed rounded-lg p-10 flex flex-col items-center justify-center gap-3 bg-card border-muted hover:border-primary transition-colors">
+                    <HugeiconsIcon icon={Image01Icon} className="size-8 text-primary" />
+                    <div className="text-center">
+                      <p className="text-sm font-medium">Select All Meme Files</p>
+                      <p className="text-[11px] text-muted-foreground">{selectedFiles.length} files selected</p>
+                    </div>
+                  </div>
+                </div>
+
+                {selectedFiles.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between px-1">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Selection ({selectedFiles.length})</p>
+                    </div>
+                    
+                    <div className="grid grid-cols-6 gap-2">
+                      {selectedFiles.slice(0, 12).map((f, i) => (
+                        <div key={i} className="aspect-square rounded border overflow-hidden">
+                          {f.type.startsWith("image") ? (
+                            <img src={URL.createObjectURL(f)} alt="f" className="size-full object-cover" />
+                          ) : (
+                            <div className="size-full flex items-center justify-center"><HugeiconsIcon icon={Image01Icon} className="size-4 opacity-20" /></div>
+                          )}
+                        </div>
+                      ))}
+                      {selectedFiles.length > 12 && (
+                         <div className="aspect-square rounded border bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
+                          +{selectedFiles.length - 12}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              <div className="relative">
-                <input type="file" multiple accept="image/*,video/*" onChange={handleImagesUpload} className="absolute inset-0 opacity-0 cursor-pointer z-10" />
-                <div className="border border-dashed rounded-lg p-10 flex flex-col items-center justify-center gap-3 bg-card border-muted hover:border-primary transition-colors">
-                  <HugeiconsIcon icon={Image01Icon} className="size-8 text-primary" />
-                  <div className="text-center">
-                    <p className="text-sm font-medium">Select All Meme Files</p>
-                    <p className="text-[11px] text-muted-foreground">{selectedFiles.length} files selected</p>
+              {/* Right Column - Expected Files Checklist */}
+              <div className="lg:col-span-5 space-y-4">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <div className="flex items-center gap-1.5">
+                    <h4 className="text-sm font-semibold">Expected Media Files</h4>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="text-muted-foreground hover:text-primary transition-colors cursor-help inline-flex items-center">
+                          <HugeiconsIcon icon={InformationCircleIcon} className="size-4" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[280px] p-3 text-xs bg-card border shadow-md">
+                          <p className="font-semibold mb-1">File Naming Guide:</p>
+                          <p className="text-muted-foreground">
+                            Upload images or videos that have the **exact same filename** (including extension, e.g., <code className="bg-muted px-1 py-0.5 rounded text-[10px]">meme1.jpg</code>) as listed in the Excel's <code className="bg-muted px-1 py-0.5 rounded text-[10px]">filename</code> column.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
+                  <span className="text-xs font-medium text-primary px-2 py-0.5 rounded-full bg-primary/10">
+                    {records.filter(r => r.matchedFile).length} / {records.length} Matched
+                  </span>
+                </div>
+
+                <div className="max-h-[300px] overflow-y-auto border rounded-md bg-card">
+                  <Table>
+                    <TableHeader className="bg-muted/50 sticky top-0 z-10 border-b">
+                      <TableRow>
+                        <TableHead className="p-2 h-8 text-xs font-semibold">Filename</TableHead>
+                        <TableHead className="p-2 h-8 text-xs font-semibold text-right">Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {records.map((r) => (
+                        <TableRow key={r.id} className="hover:bg-muted/5">
+                          <TableCell className="p-2 text-xs font-medium truncate max-w-[150px]" title={r.filename}>
+                            {r.filename}
+                          </TableCell>
+                          <TableCell className="p-2 text-right">
+                            {r.matchedFile ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-600 bg-green-500/10 rounded px-1.5 py-0.5">
+                                <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-3" />
+                                Matched
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-destructive bg-destructive/10 rounded px-1.5 py-0.5">
+                                <HugeiconsIcon icon={AlertCircleIcon} className="size-3" />
+                                Missing
+                              </span>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
 
-              {selectedFiles.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between px-1">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Selection ({selectedFiles.length})</p>
-                    <p className="text-xs font-semibold text-primary">{records.filter(r => r.matchedFile).length} / {records.length} Matched</p>
-                  </div>
-                  
-                  <div className="grid grid-cols-8 gap-2">
-                    {selectedFiles.slice(0, 16).map((f, i) => (
-                      <div key={i} className="aspect-square rounded border overflow-hidden">
-                        {f.type.startsWith("image") ? (
-                          <img src={URL.createObjectURL(f)} alt="f" className="size-full object-cover" />
-                        ) : (
-                          <div className="size-full flex items-center justify-center"><HugeiconsIcon icon={Image01Icon} className="size-4 opacity-20" /></div>
-                        )}
-                      </div>
-                    ))}
-                    {selectedFiles.length > 16 && (
-                       <div className="aspect-square rounded border bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
-                        +{selectedFiles.length - 16}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex justify-center gap-3 pt-2">
-                    <Button variant="ghost" size="sm" onClick={() => setStep(1)}>Back</Button>
-                    <Button size="sm" className="px-8 rounded-md font-medium gap-2" onClick={() => setStep(3)}>
-                      Review List <HugeiconsIcon icon={ArrowRight01Icon} className="size-4" />
-                    </Button>
-                  </div>
-                </div>
-              )}
+              {/* Bottom Controls */}
+              <div className="col-span-full flex justify-center gap-3 pt-6 border-t">
+                <Button variant="ghost" size="sm" onClick={() => setStep(1)}>Back</Button>
+                <Button size="sm" className="px-8 rounded-md font-medium gap-2" onClick={() => setStep(3)} disabled={selectedFiles.length === 0}>
+                  Review List <HugeiconsIcon icon={ArrowRight01Icon} className="size-4" />
+                </Button>
+              </div>
             </div>
           )}
 
@@ -386,71 +448,71 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
               </div>
               
               <div className="flex-1 min-h-0 border rounded-md overflow-hidden bg-card">
-                <div className="h-full overflow-y-auto">
-                  <table className="w-full text-sm text-left border-collapse">
-                    <thead className="bg-muted/50 sticky top-0 z-10 border-b text-[10px] uppercase tracking-wider">
-                      <tr>
-                        <th className="p-3 font-semibold w-16 text-center">Media</th>
-                        <th className="p-3 font-semibold min-w-[200px]">Meme Details (Title / Tags)</th>
-                        <th className="p-3 font-semibold w-32 text-center">AI Vector</th>
-                        <th className="p-3 font-semibold w-20 text-right">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/50">
-                      {records.map((r) => (
-                        <tr key={r.id} className="hover:bg-muted/10 transition-colors group">
-                          <td className="p-3">
-                            <div className="size-11 rounded border bg-muted/30 flex items-center justify-center overflow-hidden">
-                              {r.matchedFile ? (
-                                <img src={URL.createObjectURL(r.matchedFile)} alt="p" className="size-full object-cover" />
-                              ) : (
-                                <HugeiconsIcon icon={Image01Icon} className="size-4 opacity-20" />
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-3">
-                            <div className="flex flex-col gap-1.5">
+                <Table>
+                  <TableHeader className="bg-muted/50 sticky top-0 z-10 border-b">
+                    <TableRow>
+                      <TableHead className="p-3 w-16 text-center text-[10px] font-semibold uppercase tracking-wider">Media</TableHead>
+                      <TableHead className="p-3 min-w-[200px] text-[10px] font-semibold uppercase tracking-wider">Meme Details (Title / Tags)</TableHead>
+                      <TableHead className="p-3 w-32 text-center text-[10px] font-semibold uppercase tracking-wider">AI Vector</TableHead>
+                      <TableHead className="p-3 w-20 text-right text-[10px] font-semibold uppercase tracking-wider">Action</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {records.map((r) => (
+                      <TableRow key={r.id} className="hover:bg-muted/10 transition-colors group">
+                        <TableCell className="p-3">
+                          <div className="size-11 rounded border bg-muted/30 flex items-center justify-center overflow-hidden">
+                            {r.matchedFile ? (
+                              <img src={URL.createObjectURL(r.matchedFile)} alt="p" className="size-full object-cover" />
+                            ) : (
+                              <HugeiconsIcon icon={Image01Icon} className="size-4 opacity-20" />
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="p-3">
+                          <div className="flex flex-col gap-1.5">
+                            <input 
+                              className="w-full bg-transparent border-none focus:ring-0 focus:outline-none font-medium text-sm p-0 placeholder:text-muted-foreground/30 focus:text-primary transition-colors"
+                              value={r.title}
+                              onChange={(e) => updateRecord(r.id, { title: e.target.value })}
+                              placeholder="Enter title..."
+                              disabled={isProcessing}
+                            />
+                            <div className="flex items-center gap-2">
+                              <HugeiconsIcon icon={Tag01Icon} className="size-3 text-muted-foreground opacity-50" />
                               <input 
-                                className="w-full bg-transparent border-none focus:ring-0 focus:outline-none font-medium text-sm p-0 placeholder:text-muted-foreground/30 focus:text-primary transition-colors"
-                                value={r.title}
-                                onChange={(e) => updateRecord(r.id, { title: e.target.value })}
-                                placeholder="Enter title..."
+                                className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-[11px] p-0 text-muted-foreground placeholder:text-muted-foreground/30 focus:text-primary transition-colors"
+                                value={r.tags}
+                                onChange={(e) => updateRecord(r.id, { tags: e.target.value })}
+                                placeholder="tag1, tag2..."
                                 disabled={isProcessing}
                               />
-                              <div className="flex items-center gap-2">
-                                <HugeiconsIcon icon={Tag01Icon} className="size-3 text-muted-foreground opacity-50" />
-                                <input 
-                                  className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-[11px] p-0 text-muted-foreground placeholder:text-muted-foreground/30 focus:text-primary transition-colors"
-                                  value={r.tags}
-                                  onChange={(e) => updateRecord(r.id, { tags: e.target.value })}
-                                  placeholder="tag1, tag2..."
-                                  disabled={isProcessing}
-                                />
-                              </div>
-                              {r.status === "uploading" && <Progress value={r.progress || 0} className="h-0.5 mt-1" />}
                             </div>
-                          </td>
-                          <td className="p-3 text-center">
-                            {r.status === "success" ? (
-                              <div className="flex flex-col items-center gap-1">
-                                <HugeiconsIcon 
-                                  icon={SparklesIcon} 
-                                  className={cn("size-4", r.embeddingGenerated ? "text-primary" : "text-muted-foreground/30")} 
-                                />
-                                <span className={cn("text-[9px] font-medium uppercase tracking-tighter", r.embeddingGenerated ? "text-primary" : "text-muted-foreground/30")}>
-                                  {r.embeddingGenerated ? "Generated" : "N/A"}
-                                </span>
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-muted-foreground/20">Pending</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-right">
-                            <div className="flex items-center justify-end gap-2">
-                              {r.status === "pending" && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger>
+                            {r.status === "uploading" && <Progress value={r.progress || 0} className="h-0.5 mt-1" />}
+                          </div>
+                        </TableCell>
+                        <TableCell className="p-3 text-center">
+                          {r.status === "success" ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <HugeiconsIcon 
+                                icon={SparklesIcon} 
+                                className={cn("size-4", r.embeddingGenerated ? "text-primary" : "text-muted-foreground/30")} 
+                              />
+                              <span className={cn("text-[9px] font-medium uppercase tracking-tighter", r.embeddingGenerated ? "text-primary" : "text-muted-foreground/30")}>
+                                {r.embeddingGenerated ? "Generated" : "N/A"}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground/20">Pending</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {r.status === "pending" && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
                                       <Button 
                                         variant="ghost" 
                                         size="icon" 
@@ -459,41 +521,43 @@ export function BulkImportModal({ open, onOpenChange }: { open: boolean; onOpenC
                                       >
                                         <HugeiconsIcon icon={r.matchedFile ? Edit01Icon : PlusSignIcon} className="size-4" />
                                       </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left" className="text-xs">
-                                      {r.matchedFile ? "Change file" : "Manually pick file"}
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
-                              
-                              {r.status === "uploading" && (
-                                <HugeiconsIcon icon={Loading03Icon} className="size-3.5 animate-spin text-primary" />
-                              )}
-                              
-                              {r.status === "success" && (
-                                <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-4 text-green-600" />
-                              )}
-                              
-                              {r.status === "error" && (
-                                <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger>
+                                    }
+                                  />
+                                  <TooltipContent side="left" className="text-xs">
+                                    {r.matchedFile ? "Change file" : "Manually pick file"}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                            
+                            {r.status === "uploading" && (
+                              <HugeiconsIcon icon={Loading03Icon} className="size-3.5 animate-spin text-primary" />
+                            )}
+                            
+                            {r.status === "success" && (
+                              <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-4 text-green-600" />
+                            )}
+                            
+                            {r.status === "error" && (
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
                                       <Button variant="ghost" size="icon" onClick={() => pickFileForRecord(r.id)} className="size-7 text-destructive hover:bg-destructive/10">
                                         <HugeiconsIcon icon={AlertCircleIcon} className="size-3.5" />
                                       </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent side="left" className="text-[10px]">{r.error || "Upload failed"}</TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                                    }
+                                  />
+                                  <TooltipContent side="left" className="text-[10px]">{r.error || "Upload failed"}</TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
 
               <div className="flex justify-center gap-3 pt-2">
