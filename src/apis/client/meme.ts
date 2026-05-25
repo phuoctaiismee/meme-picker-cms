@@ -646,7 +646,7 @@ export const meme = {
         console.log("[suggest] Running direct vector search on memes...");
         const { data: directMatches, error: directSearchError } = await supabase.rpc("match_memes", {
           query_embedding: queryVector,
-          match_threshold: 0.72, // Cosine similarity threshold
+          match_threshold: 0.62, // Cosine similarity threshold (lowered from 0.72 for better direct matching)
           match_count: limit
         });
 
@@ -721,7 +721,13 @@ export const meme = {
       }
 
       console.log(`[suggest] Semantically matched tags: ${matchedTags.map((t: any) => t.slug).join(", ")}`);
-      const tagIds = matchedTags.map((t: any) => t.id);
+      
+      const bestScore = matchedTags[0].similarity;
+      // Only keep tags that are very close to the best match score (difference <= 0.05) to avoid false positive dilutions
+      const selectiveTags = matchedTags.filter((t: any) => (bestScore - t.similarity) <= 0.05);
+      console.log(`[suggest] Selective matched tags (within 0.05 of best match): ${selectiveTags.map((t: any) => t.slug).join(", ")}`);
+      
+      const tagIds = selectiveTags.map((t: any) => t.id);
 
       // Query memes based on these tags
       const { data: memeTagRows } = await supabase.from("meme_tags").select("meme_id").in("tag_id", tagIds);
