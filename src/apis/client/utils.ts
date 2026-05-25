@@ -25,3 +25,21 @@ export function applyPaginationAndSorting<T extends Record<string, any>>(
 
   return builder;
 }
+
+/**
+ * Generates GTE embedding for a given text by calling the GTE Model Server.
+ */
+export async function getGTEEmbedding(text: string): Promise<number[]> {
+  const serverUrl = process.env.GTE_API_URL || "http://localhost:7860";
+  const res = await fetch(`${serverUrl}/api/embed`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ texts: [text] }),
+  });
+  if (!res.ok) {
+    throw new Error(`GTE model server returned status ${res.status}: ${await res.text()}`);
+  }
+  const data = await res.json() as { embeddings: number[][] };
+  return data.embeddings[0];
+}
+

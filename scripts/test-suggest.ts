@@ -27,7 +27,7 @@ loadEnv();
 
 async function test() {
   console.log("=== Testing Meme Suggestion API ===");
-  const query = "chu meo dang nhay mua";
+  const query = "con meo tuc gian";
   console.log(`Query text: "${query}"`);
   
   const startTime = Date.now();
