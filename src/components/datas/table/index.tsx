@@ -70,6 +70,7 @@ interface DataTableProps<TData> {
   rowSelection?: Record<string, boolean>;
   onRowSelectionChange?: OnChangeFn<Record<string, boolean>>;
   getRowId?: (data: TData) => string;
+  isRowSelectable?: (data: TData) => boolean;
 }
 
 export function DataTable<TData>({
@@ -94,6 +95,7 @@ export function DataTable<TData>({
   rowSelection,
   onRowSelectionChange,
   getRowId,
+  isRowSelectable,
 }: DataTableProps<TData>) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const [internalPagination, setInternalPagination] = useState<PaginationState>({
@@ -128,6 +130,7 @@ export function DataTable<TData>({
         <div className="flex items-center justify-center w-10">
           <Checkbox
             checked={row.getIsSelected()}
+            disabled={!row.getCanSelect()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
             aria-label="Select row"
           />
@@ -154,7 +157,9 @@ export function DataTable<TData>({
     getFilteredRowModel: manualFiltering ? undefined : getFilteredRowModel(),
     onRowSelectionChange: finalOnRowSelectionChange,
     getRowId,
-    enableRowSelection: enableSelection,
+    enableRowSelection: isRowSelectable 
+      ? (row) => isRowSelectable(row.original) 
+      : enableSelection,
     state: {
       sorting,
       pagination,
@@ -254,11 +259,15 @@ export function DataTable<TData>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className={cn("relative group", (onRowClick || enableSelection) && "cursor-pointer")}
+                  className={cn(
+                    "relative group",
+                    (onRowClick || (enableSelection && row.getCanSelect())) && "cursor-pointer",
+                    enableSelection && !row.getCanSelect() && "opacity-60 cursor-not-allowed hover:bg-transparent"
+                  )}
                   onClick={() => {
-                    if (enableSelection) {
+                    if (enableSelection && row.getCanSelect()) {
                       row.toggleSelected();
-                    } else if (onRowClick) {
+                    } else if (!enableSelection && onRowClick) {
                       onRowClick(row.original);
                     }
                   }}

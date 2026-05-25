@@ -55,8 +55,8 @@ export const tag = {
   },
 
   async list(params: PaginationParams): Promise<PaginatedResult<ManagedTag>> {
-    const { page, pageSize, search, sortBy, sortOrder } = params;
-    const cacheKey = `tags:list:${JSON.stringify({ page, pageSize, search, sortBy, sortOrder })}`;
+    const { page, pageSize, search, sortBy, sortOrder, category } = params;
+    const cacheKey = `tags:list:${JSON.stringify({ page, pageSize, search, sortBy, sortOrder, category })}`;
     
     const cached = await cache.get<PaginatedResult<ManagedTag>>(cacheKey);
     if (cached) {
@@ -69,6 +69,14 @@ export const tag = {
     let query = supabase
       .from("tags")
       .select("id, name, slug, category", { count: "exact" });
+
+    if (category) {
+      if (category === "uncategorized") {
+        query = query.is("category", null);
+      } else if (category !== "all") {
+        query = query.eq("category", category);
+      }
+    }
 
     query = applyPaginationAndSorting(query, params, {
       defaultSortBy: "name",
@@ -228,5 +236,39 @@ export const tag = {
       entityId: data.id,
       metadata: data,
     });
+  },
+
+  async deleteBulk(ids: number[]): Promise<void> {
+    const supabase = await createSupabaseServerClient();
+
+    const { data: usageData, error: countError } = await supabase
+      .from("meme_tags")
+      .select("tag_id, memes!inner(id)")
+      .in("tag_id", ids)
+      .eq("memes.is_active", true);
+
+    if (countError) throw new Error(countError.message);
+    if (usageData && usageData.length > 0) {
+      throw new Error("Some selected tags are attached to active memes and cannot be deleted.");
+    }
+
+    const { error } = await supabase
+      .from("tags")
+      .delete()
+      .in("id", ids);
+
+    if (error) throw new Error(error.message);
+
+    // Invalidate tag cache
+    await cache.invalidate("tags:");
+
+    for (const id of ids) {
+      await logAdminAction({
+        action: "tag.delete",
+        entityType: "tag",
+        entityId: id,
+        metadata: { id },
+      });
+    }
   },
 };

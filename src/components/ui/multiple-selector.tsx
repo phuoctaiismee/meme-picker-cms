@@ -73,6 +73,8 @@ function uniqueOptions(options: Option[]) {
   });
 }
 
+const EMPTY_ARRAY: Option[] = [];
+
 const MultipleSelector = React.forwardRef<
   MultipleSelectorRef,
   MultipleSelectorProps
@@ -81,7 +83,7 @@ const MultipleSelector = React.forwardRef<
     value,
     onChange,
     placeholder,
-    defaultOptions = [],
+    defaultOptions = EMPTY_ARRAY,
     options: controlledOptions,
     delay = 300,
     onSearch,
