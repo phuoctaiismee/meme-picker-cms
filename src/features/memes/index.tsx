@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { MemeList } from "./components/meme-list";
 import type { Meme, MemeTag } from "@/apis/interfaces/memes";
@@ -44,6 +45,11 @@ export function MemeScreen() {
     setStatus,
     apiParams,
   } = useTableState();
+
+  // Reset pagination to page 1 when search, status, or tag filters change
+  useEffect(() => {
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  }, [search, status, selectedTagSlugs, setPagination]);
 
   const fullApiParams = {
     ...apiParams,

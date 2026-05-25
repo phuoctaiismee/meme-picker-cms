@@ -369,6 +369,11 @@ export function TagsScreen() {
     apiParams,
   } = useTableState();
 
+  const handleCategoryChange = (cat: string) => {
+    setSelectedCategory(cat);
+    setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
+  };
+
   const selectedIds = React.useMemo(
     () => Object.keys(rowSelection).filter((id) => rowSelection[id]).map(Number),
     [rowSelection]
@@ -562,7 +567,7 @@ export function TagsScreen() {
             type="button"
             variant={selectedCategory === "all" ? "default" : "ghost"}
             size="xs"
-            onClick={() => setSelectedCategory("all")}
+            onClick={() => handleCategoryChange("all")}
             className={cn(
               "rounded-lg h-7 px-3 text-xs capitalize font-semibold cursor-pointer",
               selectedCategory === "all"
@@ -577,7 +582,7 @@ export function TagsScreen() {
             type="button"
             variant={selectedCategory === "uncategorized" ? "default" : "ghost"}
             size="xs"
-            onClick={() => setSelectedCategory("uncategorized")}
+            onClick={() => handleCategoryChange("uncategorized")}
             className={cn(
               "rounded-lg h-7 px-3 text-xs capitalize font-semibold cursor-pointer",
               selectedCategory === "uncategorized"
@@ -593,7 +598,7 @@ export function TagsScreen() {
               type="button"
               variant={selectedCategory === thirdCategory ? "default" : "ghost"}
               size="xs"
-              onClick={() => setSelectedCategory(thirdCategory)}
+              onClick={() => handleCategoryChange(thirdCategory)}
               className={cn(
                 "rounded-lg h-7 px-3 text-xs capitalize font-semibold cursor-pointer",
                 selectedCategory === thirdCategory
@@ -629,7 +634,7 @@ export function TagsScreen() {
                   {dropdownCategories.map((cat) => (
                     <DropdownMenuItem
                       key={cat}
-                      onClick={() => setSelectedCategory(cat)}
+                      onClick={() => handleCategoryChange(cat)}
                       className="capitalize cursor-pointer"
                     >
                       {cat}
@@ -686,7 +691,10 @@ export function TagsScreen() {
         pagination={pagination}
         onPaginationChange={setPagination}
         globalFilter={search}
-        onGlobalFilterChange={setSearch}
+        onGlobalFilterChange={(val) => {
+          setSearch(val);
+          setPagination({ pageIndex: 0, pageSize: pagination.pageSize });
+        }}
         sorting={sorting}
         onSortingChange={setSorting}
         enableSelection={isBulkMode}
