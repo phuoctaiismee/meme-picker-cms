@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { createMemeAction as createMeme, type CreateMemeState } from "@/features
 import type { MemeTag } from "@/apis/interfaces/tags";
 import { accessTiers } from "@/mock-data/memes";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Loading03Icon, Upload01Icon, Tag01Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
+import { Loading03Icon, Upload01Icon, Tag01Icon, InformationCircleIcon, SparklesIcon } from "@hugeicons/core-free-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { FileUpload } from "@/components/ui/file-upload";
 import { BulkImportModal } from "./bulk-import-modal";
@@ -58,9 +58,14 @@ export function CreateMemeForm() {
   const [previewType, setPreviewType] = useState<"image" | "video" | null>(null);
   const [selectedTags, setSelectedTags] = useState<Option[]>([]);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [title, setTitle] = useState("");
+  const [ocrContent, setOcrContent] = useState("");
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const queryClient = useQueryClient();
 
   const handleFileChange = (file: File | null) => {
+    setSelectedFile(file);
     setPreviewType(null);
     setPreviewUrl((current) => {
       if (current) {
@@ -73,6 +78,39 @@ export function CreateMemeForm() {
 
     setPreviewType(file.type.startsWith("video/") ? "video" : "image");
     setPreviewUrl(URL.createObjectURL(file));
+  };
+
+  const handleGenerateAIContent = () => {
+    if (!selectedFile) return;
+
+    setIsAnalyzing(true);
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+
+    fetch("/api/memes/analyze", {
+      method: "POST",
+      body: formData,
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to analyze image.");
+        return res.json();
+      })
+      .then((data: any) => {
+        if (data && !data.error) {
+          if (data.title !== undefined) setTitle(data.title ?? "");
+          if (data.ocr_content !== undefined) setOcrContent(data.ocr_content ?? "");
+          if (data.tags && Array.isArray(data.tags)) {
+            setSelectedTags(
+              data.tags.map((t: any) => ({
+                value: t.slug,
+                label: t.name,
+              }))
+            );
+          }
+        }
+      })
+      .catch((err) => console.error("Meme analysis error:", err))
+      .finally(() => setIsAnalyzing(false));
   };
 
   useEffect(() => {
@@ -124,6 +162,8 @@ export function CreateMemeForm() {
               <Input
                 id="title"
                 name="title"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
                 placeholder="Enter a catchy title (optional)"
                 className="bg-muted/30"
               />
@@ -220,6 +260,8 @@ export function CreateMemeForm() {
             <textarea
               id="ocr_content"
               name="ocr_content"
+              value={ocrContent}
+              onChange={(e) => setOcrContent(e.target.value)}
               rows={4}
               placeholder="Paste any text found in the meme here to make it searchable..."
               className="border-input bg-muted/30 min-h-24 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none placeholder:text-muted-foreground focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary transition-all"
@@ -238,8 +280,17 @@ export function CreateMemeForm() {
             {previewUrl && previewType === "video" ? (
               <video src={previewUrl} controls className="size-full object-cover rounded-lg" />
             ) : previewUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={previewUrl} alt="Meme preview" className="size-full object-cover rounded-lg" />
+              <div className="relative size-full">
+                {/* eslint-next-line @next/next/no-img-element */}
+                <img src={previewUrl} alt="Meme preview" className="size-full object-cover rounded-lg animate-fade-in" />
+                {isAnalyzing && (
+                  <div className="absolute inset-0 bg-background/80 backdrop-blur-xs rounded-lg flex flex-col items-center justify-center p-4 text-center">
+                    <HugeiconsIcon icon={Loading03Icon} className="size-8 animate-spin text-primary mb-3" />
+                    <p className="text-sm font-semibold">Gemini is analyzing...</p>
+                    <p className="text-xs text-muted-foreground mt-1">Auto-generating Title, OCR & Tags</p>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
                 <div className="size-12 rounded-full bg-background flex items-center justify-center mb-4 border shadow-sm">
@@ -250,6 +301,28 @@ export function CreateMemeForm() {
               </div>
             )}
           </div>
+
+          {previewUrl && previewType === "image" && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isAnalyzing}
+              onClick={handleGenerateAIContent}
+              className="w-full mt-4 gap-2 bg-purple-500/10 border-purple-500/20 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 hover:text-purple-700"
+            >
+              {isAnalyzing ? (
+                <>
+                  <HugeiconsIcon icon={Loading03Icon} className="size-4 animate-spin" />
+                  Generating content...
+                </>
+              ) : (
+                <>
+                  <HugeiconsIcon icon={SparklesIcon} className="size-4" />
+                  Generate Content by AI
+                </>
+              )}
+            </Button>
+          )}
 
           <div className="mt-4 rounded-xl border bg-primary/5 p-4 text-xs text-muted-foreground flex gap-3">
             <HugeiconsIcon icon={InformationCircleIcon} className="size-4 shrink-0 text-primary" />

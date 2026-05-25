@@ -294,6 +294,13 @@
   resolved "https://registry.npmjs.org/@google/generative-ai/-/generative-ai-0.24.1.tgz"
   integrity sha512-MqO+MLfM6kjxcKoy0p1wRzG3b4ZZXtPI+z2IE26UogS2Cm/XHO+7gGRBh6gcJsOiIVoH93UwKvW4HdgiOZCy9Q==
 
+"@hookform/resolvers@^5.2.2":
+  version "5.4.0"
+  resolved "https://registry.yarnpkg.com/@hookform/resolvers/-/resolvers-5.4.0.tgz#89ff709a08576766fbef849e5ec60e549a888006"
+  integrity sha512-EIsqr/t/qbinPIhGjMdtvutIN1Kk4uwbROE9/UQ93CAVGR7GkA7Y92+fX80OzXi/OB67jVFYwKGO1WzkxmkFZw==
+  dependencies:
+    "@standard-schema/utils" "^0.3.0"
+
 "@hugeicons/core-free-icons@^2.0.0":
   version "2.0.0"
   resolved "https://registry.npmjs.org/@hugeicons/core-free-icons/-/core-free-icons-2.0.0.tgz"
@@ -3058,6 +3065,11 @@ react-dom@19.2.1:
   dependencies:
     scheduler "^0.27.0"
 
+react-hook-form@^7.75.0:
+  version "7.76.1"
+  resolved "https://registry.yarnpkg.com/react-hook-form/-/react-hook-form-7.76.1.tgz#0ef905eae5c17e32b6edc2ac628921917e87aafa"
+  integrity sha512-rYM7tPiWlu3nZchkR/ex7piyzui2vFPyaLnXnI/RnblB/L4qfMmyses8llJVtF1NpE9WBBsJlGtcSZzPCXW1qQ==
+
 react-is@^16.13.1:
   version "16.13.1"
   resolved "https://registry.npmjs.org/react-is/-/react-is-16.13.1.tgz"
@@ -3772,9 +3784,9 @@ yocto-queue@^0.1.0:
   resolved "https://registry.npmjs.org/zod-validation-error/-/zod-validation-error-4.0.2.tgz"
   integrity sha512-Q6/nZLe6jxuU80qb/4uJ4t5v2VEZ44lzQjPDhYJNztRQ4wyWc6VF3D3Kb/fAuPetZQnhS3hnajCf9CsWesghLQ==
 
-"zod@^3.25.0 || ^4.0.0":
+"zod@^3.25.0 || ^4.0.0", zod@^4.4.3:
   version "4.4.3"
-  resolved "https://registry.npmjs.org/zod/-/zod-4.4.3.tgz"
+  resolved "https://registry.yarnpkg.com/zod/-/zod-4.4.3.tgz#b680f172885d18bbebf21a834ea25e55a1bbf356"
   integrity sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==
 
 zustand@^5.0.9:
