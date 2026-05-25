@@ -3,7 +3,7 @@ import { logAdminAction } from "./audit";
 import { slugifyTag } from "@/lib/slug";
 import type { MemeTag, TagManagementData, ManagedTag } from "@/apis/interfaces/tags";
 import type { PaginatedResult, PaginationParams } from "@/apis/interfaces/pagination";
-import { applyPaginationAndSorting } from "./utils";
+import { applyPaginationAndSorting, getGTEEmbedding } from "./utils";
 import { cache } from "@/lib/cache";
 
 export interface CreateTagInput {
@@ -125,9 +125,16 @@ export const tag = {
     const { data: existing } = await supabase.from("tags").select("id").eq("slug", slug).maybeSingle();
     if (existing) throw new Error("A tag with this slug already exists.");
 
+    let embedding: number[] | null = null;
+    try {
+      embedding = await getGTEEmbedding(input.name);
+    } catch (err) {
+      console.error("[tag.create] Failed to generate GTE embedding for tag:", err);
+    }
+
     const { data, error } = await supabase
       .from("tags")
-      .insert({ name: input.name, slug, category: input.category || null })
+      .insert({ name: input.name, slug, category: input.category || null, embedding })
       .select("id, name, slug, category")
       .single();
 
@@ -161,9 +168,16 @@ export const tag = {
 
     if (existing) throw new Error("A tag with this slug already exists.");
 
+    let embedding: number[] | null = null;
+    try {
+      embedding = await getGTEEmbedding(input.name);
+    } catch (err) {
+      console.error("[tag.update] Failed to generate GTE embedding for tag:", err);
+    }
+
     const { data, error } = await supabase
       .from("tags")
-      .update({ name: input.name, slug, category: input.category || null })
+      .update({ name: input.name, slug, category: input.category || null, embedding })
       .eq("id", input.id)
       .select("id, name, slug, category")
       .single();

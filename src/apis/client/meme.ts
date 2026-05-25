@@ -5,22 +5,8 @@ import { logAdminAction } from "./audit";
 import type { Meme, MemeListData } from "@/apis/interfaces/memes";
 import type { MemeTag } from "@/apis/interfaces/tags";
 import type { PaginatedResult, PaginationParams } from "@/apis/interfaces/pagination";
-import { applyPaginationAndSorting } from "./utils";
+import { applyPaginationAndSorting, getGTEEmbedding } from "./utils";
 import { cache } from "@/lib/cache";
-
-async function getGTEEmbedding(text: string): Promise<number[]> {
-  const serverUrl = process.env.GTE_API_URL || "http://localhost:7860";
-  const res = await fetch(`${serverUrl}/api/embed`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ texts: [text] }),
-  });
-  if (!res.ok) {
-    throw new Error(`GTE model server returned status ${res.status}: ${await res.text()}`);
-  }
-  const data = await res.json() as { embeddings: number[][] };
-  return data.embeddings[0];
-}
 
 interface MemeTagJoin {
   tags: MemeTag | MemeTag[] | null;
@@ -254,9 +240,16 @@ export const meme = {
 
     const tagRows = await Promise.all(
       input.tags.map(async (tag) => {
+        let embedding: number[] | null = null;
+        try {
+          embedding = await getGTEEmbedding(tag.name);
+        } catch (err) {
+          console.error(`[create.upsertTag] Failed to generate GTE embedding for ${tag.name}:`, err);
+        }
+
         const { data, error } = await supabase
           .from("tags")
-          .upsert({ name: tag.name, slug: tag.slug, category: "general" }, { onConflict: "slug" })
+          .upsert({ name: tag.name, slug: tag.slug, category: "general", embedding }, { onConflict: "slug" })
           .select("id")
           .single();
 
@@ -345,9 +338,16 @@ export const meme = {
 
       const tagRows = await Promise.all(
         input.tags.map(async (tag) => {
+          let embedding: number[] | null = null;
+          try {
+            embedding = await getGTEEmbedding(tag.name);
+          } catch (err) {
+            console.error(`[update.upsertTag] Failed to generate GTE embedding for ${tag.name}:`, err);
+          }
+
           const { data, error } = await supabase
             .from("tags")
-            .upsert({ name: tag.name, slug: tag.slug, category: "general" }, { onConflict: "slug" })
+            .upsert({ name: tag.name, slug: tag.slug, category: "general", embedding }, { onConflict: "slug" })
             .select("id")
             .single();
 
@@ -595,7 +595,7 @@ export const meme = {
     // 1. Generate GTE query embedding
     try {
       console.log("[suggest] Embedding query with GTE model server...");
-      queryVector = await getGTEEmbedding(normalizedContext);
+      queryVector = await getGTEEmbedding(`Query: ${normalizedContext}`);
     } catch (err) {
       console.error("[suggest] Failed to generate GTE query embedding:", err);
     }
@@ -606,7 +606,7 @@ export const meme = {
         console.log("[suggest] Checking semantic cache in interactions...");
         const { data: matches, error: rpcError } = await supabase.rpc("match_past_suggestions", {
           query_embedding: queryVector,
-          match_threshold: 0.75, // Increased from 0.1 to avoid false positives
+          match_threshold: 0.82, // Tăng lên 0.82 để tránh false positive cho các ngữ cảnh khác nhau
           match_count: 1
         });
 
@@ -695,67 +695,35 @@ export const meme = {
       }
     }
 
-    // 4. Fallback: Tag Inference via Gemini 2.5 Flash
-    console.log("[suggest] Direct search missed or threshold too low. Falling back to Tag Inference...");
-    
-    // Fetch all available tags
-    const { data: tags, error: tagsError } = await supabase
-      .from("tags")
-      .select("name, slug");
-
-    if (tagsError || !tags) return [];
-    const tagList = tags.map(t => `${t.name} (${t.slug})`).join(", ");
-
+    // 4. Fallback: Semantic Tag Matching via GTE (100% Free & No Gemini tokens)
+    console.log("[suggest] Direct search missed. Falling back to GTE Semantic Tag Matching...");
     try {
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-      const prompt = `
-        You are a meme suggestion assistant.
-        A user is viewing a social media post with the following content:
-        "${context}"
-
-        Based on this context, select up to 3 most relevant meme tags from the following list:
-        ${tagList}
-
-        If no tags are relevant, return an empty string.
-        Output ONLY the slugs of the tags separated by commas. Do not include any other text or explanation.
-      `;
-
-      console.log(`[suggest] Prompting ${model.model} for context: "${context}"`);
-      
-      let result;
-      let attempts = 0;
-      const maxAttempts = 3;
-      
-      while (attempts < maxAttempts) {
-        try {
-          result = await model.generateContent(prompt);
-          break; // Success!
-        } catch (err: any) {
-          attempts++;
-          if (err?.status === 503 && attempts < maxAttempts) {
-            console.warn(`[suggest] AI Service busy (503). Retrying in ${attempts * 1000}ms...`);
-            await new Promise(resolve => setTimeout(resolve, attempts * 1000));
-            continue;
-          }
-          throw err;
-        }
+      if (queryVector.length === 0) {
+        console.warn("[suggest] GTE queryVector is empty. Skipping fallback.");
+        return [];
       }
 
-      if (!result) return [];
-      const responseText = result.response.text().trim();
-      
-      const suggestedSlugs = responseText
-        .split(",")
-        .map(s => s.trim())
-        .filter(Boolean);
+      // Call the match_tags RPC to find the top 3 semantically related tags
+      const { data: matchedTags, error: tagMatchError } = await supabase.rpc("match_tags", {
+        query_embedding: queryVector,
+        match_threshold: 0.35, // Slightly lower threshold since tag titles are short
+        match_count: 3
+      });
 
-      if (suggestedSlugs.length === 0) return [];
+      if (tagMatchError) {
+        console.error("[suggest] match_tags RPC failed:", tagMatchError.message);
+        return [];
+      }
 
-      // Query memes based on suggested tags
-      const { data: tagRows } = await supabase.from("tags").select("id").in("slug", suggestedSlugs);
-      if (!tagRows || tagRows.length === 0) return [];
+      if (!matchedTags || matchedTags.length === 0) {
+        console.log("[suggest] No semantically matching tags found.");
+        return [];
+      }
 
-      const tagIds = tagRows.map(t => t.id);
+      console.log(`[suggest] Semantically matched tags: ${matchedTags.map((t: any) => t.slug).join(", ")}`);
+      const tagIds = matchedTags.map((t: any) => t.id);
+
+      // Query memes based on these tags
       const { data: memeTagRows } = await supabase.from("meme_tags").select("meme_id").in("tag_id", tagIds);
       if (!memeTagRows || memeTagRows.length === 0) return [];
 
@@ -769,33 +737,31 @@ export const meme = {
       if (!memes) return [];
 
       // Save suggestion to Semantic Cache
-      if (queryVector.length > 0) {
-        try {
-          const finalMemeIds = memes.map(m => m.id);
-          console.log(`[suggest] Saving GTE fallback result to DB cache. Vector length: ${queryVector.length}`);
+      try {
+        const finalMemeIds = memes.map(m => m.id);
+        console.log(`[suggest] Saving GTE fallback result to DB cache. Vector length: ${queryVector.length}`);
 
-          const { error: insertError } = await supabase.from("interactions").insert({
-            action_type: "ai_suggestion",
-            context_metadata: {
-              context_text: normalizedContext,
-              suggested_meme_ids: finalMemeIds
-            },
-            embedding: queryVector
-          });
+        const { error: insertError } = await supabase.from("interactions").insert({
+          action_type: "ai_suggestion",
+          context_metadata: {
+            context_text: normalizedContext,
+            suggested_meme_ids: finalMemeIds
+          },
+          embedding: queryVector
+        });
 
-          if (insertError) {
-            console.error("[suggest] Supabase insert error:", insertError.message, insertError.details);
-          } else {
-            console.log("[suggest] Successfully saved to interactions (semantic cache).");
-          }
-        } catch (saveErr) {
-          console.error("[suggest] Unexpected error during save:", saveErr);
+        if (insertError) {
+          console.error("[suggest] Supabase insert error:", insertError.message, insertError.details);
+        } else {
+          console.log("[suggest] Successfully saved to interactions (semantic cache).");
         }
+      } catch (saveErr) {
+        console.error("[suggest] Unexpected error during save:", saveErr);
       }
 
       return (memes as any[]).map(mapMeme);
     } catch (error) {
-      console.error("[suggest] Fallback AI error:", error);
+      console.error("[suggest] Fallback Tag Matching error:", error);
       return [];
     }
   },
