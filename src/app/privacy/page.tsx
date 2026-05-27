@@ -101,7 +101,7 @@ export default function PrivacyPolicyPage() {
               Meme Picker: Smart Meme Keyboard
             </p>
             <p className="text-xs text-muted-foreground">
-              {lang === "vi" ? "Cập nhật lần cuối: 23 tháng 5, 2026" : "Last updated: May 23, 2026"}
+              {lang === "vi" ? "Cập nhật lần cuối: 27 tháng 5, 2026" : "Last updated: May 27, 2026"}
             </p>
           </div>
         </div>
@@ -187,11 +187,10 @@ export default function PrivacyPolicyPage() {
                   </div>
                   <div className="space-y-1">
                     <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                      • Quyền Clipboard (clipboardRead / clipboardWrite)
+                      • Không sử dụng quyền Clipboard (Zero Clipboard Access)
                     </h4>
-                    <p className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-                      Cho phép tiện ích sao chép hình ảnh meme bạn chọn vào khay nhớ tạm để tự động dán vào khung bình
-                      luận hoặc khung đăng bài. Tiện ích không bao giờ đọc dữ liệu nhạy cảm sẵn có trong Clipboard của bạn.
+                    <p className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20 text-emerald-600 dark:text-emerald-400 font-medium">
+                      Tiện ích đã loại bỏ hoàn toàn các quyền truy cập Clipboard (<code className="bg-muted px-1 py-0.5 rounded">clipboardRead</code> và <code className="bg-muted px-1 py-0.5 rounded">clipboardWrite</code>). Việc chèn ảnh meme được thực hiện an toàn thông qua tính năng Kéo & Thả (Drag & Drop) hoặc chèn trực tiếp qua API đầu vào của trình duyệt, đảm bảo tuyệt đối không can thiệp đến khay nhớ tạm của bạn.
                     </p>
                   </div>
                   <div className="space-y-1">
@@ -334,11 +333,10 @@ export default function PrivacyPolicyPage() {
                   </div>
                   <div className="space-y-1">
                     <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
-                      • Clipboard (clipboardRead / clipboardWrite)
+                      • Zero Clipboard Access
                     </h4>
-                    <p className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20">
-                      Allows copying your selected meme to the clipboard so it can be pasted automatically into the text
-                      composer. No unrelated clipboard history or sensitive clipboard data is accessed.
+                    <p className="text-xs text-muted-foreground leading-relaxed pl-3 border-l-2 border-primary/20 text-emerald-600 dark:text-emerald-400 font-medium">
+                      The extension has fully removed clipboard permissions (<code className="bg-muted px-1 py-0.5 rounded">clipboardRead</code> and <code className="bg-muted px-1 py-0.5 rounded">clipboardWrite</code>). Meme insertions are securely completed via browser Drag & Drop or native input target injections, guaranteeing your clipboard history and data remain entirely private.
                     </p>
                   </div>
                   <div className="space-y-1">
